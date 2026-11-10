@@ -1,5 +1,5 @@
 import { clock } from "./clock";
-import { isRoom, locationName } from "./map";
+import { CAMERA_ROOMS, isRoom, locationName } from "./map";
 import { byId } from "./rules";
 import type { Claim, GameState, LocationId, Segment } from "./types";
 
@@ -9,6 +9,8 @@ export interface Recollection {
   from: number;
   to: number;
   saw: string[];
+  /** Seen on a security camera feed rather than in person. */
+  camera?: boolean;
 }
 
 const MIN_SIGHTING = 0.4; // minutes of overlap before you "saw" someone
@@ -49,6 +51,42 @@ function mergeShortHops(items: Recollection[]): Recollection[] {
     } else out.push({ ...r, saw: [...r.saw] });
   }
   return out;
+}
+
+/** What `who` saw on the camera feeds between from..to: one recollection per camera room per sitting. */
+export function cameraRecollections(state: GameState, who: string, from: number, to: number): Recollection[] {
+  const out: Recollection[] = [];
+  for (const sess of state.camSessions) {
+    if (sess.who !== who) continue;
+    const a = Math.max(sess.from, from);
+    const b = Math.min(sess.to ?? state.t, to);
+    if (b - a < 0.3) continue;
+    for (const room of CAMERA_ROOMS) {
+      const saw = new Set<string>();
+      for (const o of state.segments) {
+        if (o.who === who || o.loc !== room) continue;
+        const ow = clip(o, a, b, state.t);
+        if (ow && ow.b - ow.a >= MIN_SIGHTING) saw.add(o.who);
+      }
+      out.push({ loc: room, from: a, to: b, saw: [...saw], camera: true });
+    }
+  }
+  return out;
+}
+
+/** Everything `who` could vouch for: what they saw in person plus what they saw on camera. */
+export function observe(state: GameState, who: string, from: number, to: number): Recollection[] {
+  return [...recollect(state, who, from, to), ...cameraRecollections(state, who, from, to)];
+}
+
+/** Kills that `who` watched happen on a camera feed. */
+export function killsSeenOnCamera(state: GameState, who: string) {
+  return state.kills.filter(
+    (k) =>
+      k.killer !== who &&
+      CAMERA_ROOMS.includes(k.loc as (typeof CAMERA_ROOMS)[number]) &&
+      state.camSessions.some((s) => s.who === who && s.from <= k.t && (s.to ?? state.t) >= k.t),
+  );
 }
 
 export function describeRecollection(state: GameState, r: Recollection): string {

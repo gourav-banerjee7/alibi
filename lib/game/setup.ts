@@ -37,6 +37,7 @@ export function newGame(seed: number, startRole: StartRole = "crew"): GameState 
     tasks: [],
     clues: [],
     emergencyUsed: false,
+    camSessions: [],
     log: [],
   };
 

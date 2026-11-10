@@ -22,12 +22,17 @@ and some only pretend so they can expose you at the next meeting.
 | Task | stand on a yellow ring, hold **E** / Space / the Use button |
 | Report a body | **R** |
 | Emergency meeting | **M** in the Mess Hall, once per game |
+| Security cameras | **C** at the Comms desk; Esc or any movement to leave |
 | Kill (killer) | **K** when you're alone with someone |
 | Offer a deal (killer) | **Q** when you're alone with someone |
 
 - The camera follows you through the station; the minimap (top right) shows where you are and your open tasks.
 - Every room is furnished and solid: a moon pool with a docked sub, a sonar wall, jellyfish tanks, a pulsing reactor
   core, sick-bay beds, kelp rows. You and the crew walk around it all.
+- **Security cameras:** stand at the Comms desk and press **C** to watch live feeds of the Sub Dock, Bio Lab,
+  Reactor and Medbay. While anyone watches, every camera's red light is on, so the killer knows to avoid those
+  rooms. The crew use the desk too: a murder caught on camera gets named at the meeting, and anyone who watched
+  a room can disprove a false alibi about it.
 - You only see people in the same room or tube as you.
 - Each finished task pulls one **true** sonar log ("Kenji was in Reactor 02:31–02:40").
 - The storm clears after three meetings. If the killer is still aboard, the killer's side wins.
@@ -74,7 +79,7 @@ npm run dev
 ```
 
 ```bash
-npm test          # 27 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
+npm test          # 38 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
 npm run typecheck
 npm run lint
 npm run build

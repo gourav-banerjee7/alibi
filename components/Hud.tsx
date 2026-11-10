@@ -5,7 +5,7 @@ import { clock } from "@/lib/game/clock";
 import { locationName } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
 import { MAX_MEETINGS } from "@/lib/game/setup";
-import { canCallEmergency, killBlockedReason, killTarget, nearbyTask, pactCandidate, visibleBody } from "@/lib/game/sim";
+import { canCallEmergency, canUseCameras, isWatching, killBlockedReason, killTarget, nearbyTask, pactCandidate, visibleBody } from "@/lib/game/sim";
 import type { GameState } from "@/lib/game/types";
 import type { DirectorStatus } from "@/lib/ai/director";
 import { DiverIcon } from "./DiverIcon";
@@ -117,6 +117,7 @@ interface ActionProps {
   onEmergency: () => void;
   onKill: () => void;
   onOffer: () => void;
+  onCameras: () => void;
 }
 
 type Tone = "glow" | "ember" | "coral" | "orchid" | "plain";
@@ -151,7 +152,7 @@ function Btn(props: { label: string; hint: string; onClick?: () => void; disable
   );
 }
 
-export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer }: ActionProps) {
+export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer, onCameras }: ActionProps) {
   const you = player(state);
   const task = nearbyTask(state);
   const body = visibleBody(state);
@@ -162,6 +163,13 @@ export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOff
     <div className="flex flex-wrap items-center justify-center gap-2">
       <Btn label="Use" hint="hold E / Space" tone="glow" holdRef={useHeld} disabled={!task} sub={task ? task.label : "stand on a dashed ring"} />
       <Btn label="Report body" hint="R" tone="ember" onClick={onReport} disabled={!body} />
+      <Btn
+        label={isWatching(state, "you") ? "Leave cameras" : "Cameras"}
+        hint="C · Comms desk"
+        tone="glow"
+        onClick={onCameras}
+        disabled={!isWatching(state, "you") && !canUseCameras(state)}
+      />
       <Btn label="Emergency" hint="M · Mess Hall only" onClick={onEmergency} disabled={!canCallEmergency(state)} sub={state.emergencyUsed ? "used" : undefined} />
       {isKiller ? (
         <>

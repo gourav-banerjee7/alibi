@@ -5,7 +5,7 @@
 import { clock } from "@/lib/game/clock";
 import { confront, contradictionsFor } from "@/lib/game/judge";
 import { locationName } from "@/lib/game/map";
-import { claimsOf, coverStory, lastSighting, recollect } from "@/lib/game/memory";
+import { cameraRecollections, claimsOf, coverStory, killsSeenOnCamera, lastSighting, recollect } from "@/lib/game/memory";
 import { alliesOfKiller, aliveChars, byId } from "@/lib/game/rules";
 import type { Character, Claim, GameState, MeetingRecord, PactKind } from "@/lib/game/types";
 import { secretsOf } from "./context";
@@ -61,6 +61,14 @@ function narrate(state: GameState, claims: Claim[], company?: Map<string, string
 
 /** Exposes a pact confession if this character knows one. */
 function exposure(state: GameState, id: string): { text: string; target: string } | undefined {
+  // Video beats hearsay: a murder seen on camera comes first.
+  const filmed = killsSeenOnCamera(state, id)[0];
+  if (filmed) {
+    return {
+      text: `I was on the cameras at ${clock(filmed.t)}. I watched ${byId(state, filmed.killer).name} kill ${byId(state, filmed.victim).name} in ${locationName(filmed.loc)}. I saw it happen.`,
+      target: filmed.killer,
+    };
+  }
   for (const o of state.pactOffers) {
     if (o.to !== id) continue;
     const pact = state.pacts.find((p) => p.killer === o.from && p.partner === id);
@@ -81,6 +89,15 @@ export function scriptedStatement(state: GameState, id: string, meeting: Meeting
   // Only what is actually said counts as a claim others can check.
   const claims = all.slice(-SPOKEN_CLAIMS);
   const parts = [opener(me, `${id}${state.t}`), narrate(state, claims, companyFor(state, id, claims))];
+
+  // Mention one thing seen on the camera feeds, if they sat at the desk.
+  if (!isKiller) {
+    const feed = cameraRecollections(state, id, state.roundStart, state.t).find((r) => r.saw.length > 0);
+    if (feed) {
+      const who = feed.saw.map((s) => (s === "you" ? "you" : byId(state, s).name));
+      parts.push(`I also sat at the cameras: ${listNames(who)} on the ${locationName(feed.loc)} feed around ${clock(feed.from)}.`);
+    }
+  }
 
   const victim = meeting.body?.victim;
   if (victim && !isKiller) {

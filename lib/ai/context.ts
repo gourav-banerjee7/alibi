@@ -1,7 +1,7 @@
 import { clock } from "@/lib/game/clock";
 import { contradictionsFor } from "@/lib/game/judge";
 import { locationName } from "@/lib/game/map";
-import { coverStory, describeClaim, describeRecollection, lastSighting, recollect } from "@/lib/game/memory";
+import { cameraRecollections, coverStory, describeClaim, describeRecollection, killsSeenOnCamera, lastSighting, recollect } from "@/lib/game/memory";
 import { aliveChars, byId } from "@/lib/game/rules";
 import type { GameState, MeetingRecord } from "@/lib/game/types";
 import type { AgentCtx, Task } from "./schema";
@@ -37,6 +37,11 @@ export function situation(state: GameState, meeting?: MeetingRecord): string {
 export function secretsOf(state: GameState, id: string): string[] {
   const me = byId(state, id);
   const out: string[] = [];
+  for (const k of killsSeenOnCamera(state, id)) {
+    out.push(
+      `On the security cameras at ${clock(k.t)} you watched ${byId(state, k.killer).name} kill ${byId(state, k.victim).name} in ${locationName(k.loc)}. You are certain. Tell the meeting.`,
+    );
+  }
   for (const k of state.kills.filter((k) => k.killer === id)) {
     out.push(`You killed ${byId(state, k.victim).name} in ${locationName(k.loc)} at ${clock(k.t)}.`);
   }
@@ -70,6 +75,11 @@ export function secretsOf(state: GameState, id: string): string[] {
 
 export function memoryLines(state: GameState, id: string, meeting?: MeetingRecord): string[] {
   const lines = recollect(state, id, state.roundStart, state.t).map((r) => describeRecollection(state, r));
+  const cams = cameraRecollections(state, id, state.roundStart, state.t);
+  for (const r of cams) {
+    const who = r.saw.map((s) => byId(state, s).name);
+    lines.push(`On the camera feed ${clock(r.from)}–${clock(r.to)}, ${locationName(r.loc)}: ${who.length > 0 ? who.join(", ") : "nobody"}.`);
+  }
   const victim = meeting?.body?.victim;
   if (victim && victim !== id) {
     const seen = lastSighting(state, id, victim, meeting.body!.t + 0.01);

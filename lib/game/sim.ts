@@ -1,9 +1,9 @@
 import { clock } from "./clock";
-import { findPath, isRoom, locationAt, locationName, ROOMS, spotInRoom, walkable } from "./map";
+import { CAMERA_DESK, CAMERA_ROOMS, findPath, isRoom, locationAt, locationName, ROOMS, spotInRoom, walkable } from "./map";
 import { next, pick } from "./rng";
 import { alliesOfKiller, aliveChars, byId, checkWin, currentKiller, player, sideOf } from "./rules";
 import { KILL_COOLDOWN, seatInMess } from "./setup";
-import type { Body, Character, GameState, Point } from "./types";
+import type { Body, Character, GameState, LocationId, Point, RoomId } from "./types";
 
 export const STEP = 0.05; // fixed sim step in real seconds (= game minutes)
 const PLAYER_SPEED = 150;
@@ -72,15 +72,59 @@ function closeSegment(state: GameState, who: string) {
   }
 }
 
+// ---- Security cameras ------------------------------------------------------------------------
+
+export const onCamera = (loc: LocationId) => CAMERA_ROOMS.includes(loc as RoomId);
+
+export function isWatching(state: GameState, who: string) {
+  return state.camSessions.some((s) => s.who === who && s.to === null);
+}
+
+/** Is anyone (other than `except`) watching the feeds right now? */
+export function camerasInUse(state: GameState, except?: string) {
+  return state.camSessions.some((s) => s.to === null && s.who !== except);
+}
+
+function openSession(state: GameState, who: string) {
+  if (!isWatching(state, who)) state.camSessions.push({ who, from: state.t, to: null });
+}
+
+function closeSession(state: GameState, who: string) {
+  for (const s of state.camSessions) if (s.who === who && s.to === null) s.to = state.t;
+}
+
+export function canUseCameras(state: GameState) {
+  const you = player(state);
+  return you.alive && state.phase === "roam" && dist(you.pos, CAMERA_DESK) <= USE_RANGE + 8;
+}
+
+export function startWatching(state: GameState) {
+  if (canUseCameras(state)) {
+    player(state).path = [];
+    openSession(state, "you");
+  }
+}
+
+export function stopWatching(state: GameState) {
+  closeSession(state, "you");
+}
+
 // ---- AI -----------------------------------------------------------------------------------
 
 const rand = (state: GameState) => () => next(state);
 
 function startErrand(state: GameState, c: Character) {
+  c.huntTarget = undefined;
+  c.errand = undefined;
+  // Now and then an innocent goes to watch the cameras, if the desk is free.
+  if (c.role !== "killer" && !camerasInUse(state) && next(state) < 0.14) {
+    c.errand = "cams";
+    walkTo(c, CAMERA_DESK);
+    return;
+  }
   const rooms = ROOMS.filter((r) => r.id !== c.loc);
   const room = pick(state, rooms);
   walkTo(c, spotInRoom(room.id, rand(state)));
-  c.huntTarget = undefined;
 }
 
 /** A target the AI killer could take without witnesses, if anyone is alone right now. */
@@ -90,6 +134,7 @@ function loneTarget(state: GameState, killer: Character): Character | undefined 
   const candidates = aliveChars(state).filter((c) => {
     if (c.id === killer.id || allies.has(c.id)) return false;
     if (c.isPlayer && !refused) return false; // the player is only hunted after turning down a pact
+    if (onCamera(c.loc) && camerasInUse(state, killer.id)) return false; // someone is watching that room
     const company = othersInLoc(state, c).filter((o) => o.id !== killer.id);
     return company.length === 0;
   });
@@ -105,6 +150,7 @@ function witnessesFor(state: GameState, killer: Character, victim: Character): C
 
 export function kill(state: GameState, killer: Character, victim: Character) {
   victim.alive = false;
+  closeSession(state, victim.id);
   victim.path = [];
   closeSegment(state, victim.id);
   const body: Body = { victim: victim.id, loc: victim.loc, pos: { ...victim.pos }, t: state.t };
@@ -143,7 +189,8 @@ function aiKiller(state: GameState, c: Character): boolean {
   }
 
   const target = c.huntTarget ? state.characters.find((x) => x.id === c.huntTarget && x.alive) : undefined;
-  if (target && target.loc === c.loc && witnessesFor(state, c, target).length === 0 && dist(c.pos, target.pos) <= KILL_RANGE) {
+  const filmed = target && onCamera(target.loc) && camerasInUse(state, c.id);
+  if (target && !filmed && target.loc === c.loc && witnessesFor(state, c, target).length === 0 && dist(c.pos, target.pos) <= KILL_RANGE) {
     kill(state, c, target);
     return true;
   }
@@ -162,14 +209,28 @@ function aiKiller(state: GameState, c: Character): boolean {
 }
 
 function aiStep(state: GameState, c: Character, dt: number) {
+  if (c.role === "killer" && isWatching(state, c.id)) closeSession(state, c.id);
   if (c.role === "killer" && aiKiller(state, c)) {
     followPath(c, AI_SPEED * 1.1, dt);
     return;
   }
   if (state.t < c.busyUntil) return;
+  if (c.errand === "cams" && isWatching(state, c.id)) {
+    closeSession(state, c.id); // done watching
+    startErrand(state, c);
+    return;
+  }
   if (c.path.length > 0) {
     followPath(c, AI_SPEED, dt);
-    if (c.path.length === 0) c.busyUntil = state.t + 4 + next(state) * 7; // do the "task" for a while
+    if (c.path.length === 0) {
+      if (c.errand === "cams" && !camerasInUse(state, c.id)) {
+        openSession(state, c.id);
+        c.busyUntil = state.t + 8 + next(state) * 6;
+      } else {
+        c.errand = undefined;
+        c.busyUntil = state.t + 4 + next(state) * 7; // do the "task" for a while
+      }
+    }
     return;
   }
   startErrand(state, c);
@@ -246,7 +307,9 @@ export function callMeeting(state: GameState, calledBy: string, reason: "body" |
   if (reason === "emergency") state.emergencyUsed = true;
   for (const c of state.characters) {
     c.path = [];
+    c.errand = undefined;
     closeSegment(state, c.id);
+    closeSession(state, c.id);
   }
   state.pending = { kind: "meeting", calledBy, reason, body };
   state.phase = "meeting";
@@ -280,6 +343,7 @@ export function tick(state: GameState, input: Input, dt = STEP) {
   if (you.alive) {
     if (input.dir && (input.dir.x !== 0 || input.dir.y !== 0)) {
       you.path = [];
+      closeSession(state, "you");
       moveBy(you, input.dir.x * PLAYER_SPEED * dt, input.dir.y * PLAYER_SPEED * dt);
     } else if (you.path.length > 0) {
       followPath(you, PLAYER_SPEED, dt);
@@ -323,6 +387,7 @@ export function startNextRound(state: GameState) {
     c.busyUntil = state.t + 1 + (i % 3);
     c.killCooldownUntil = state.t + KILL_COOLDOWN;
     c.huntTarget = undefined;
+    c.errand = undefined;
     state.segments.push({ who: c.id, loc: "mess", from: state.t, to: null });
   });
 }

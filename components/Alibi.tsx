@@ -5,9 +5,10 @@ import { Director, type DirectorStatus } from "@/lib/ai/director";
 import { finishMeeting } from "@/lib/game/actions";
 import { player } from "@/lib/game/rules";
 import { newGame, type StartRole } from "@/lib/game/setup";
-import { callMeeting, canCallEmergency, kill, killTarget, pactCandidate, startPlayerPact, tick, visibleBody } from "@/lib/game/sim";
+import { callMeeting, canCallEmergency, canUseCameras, isWatching, kill, killTarget, pactCandidate, startPlayerPact, startWatching, stopWatching, tick, visibleBody } from "@/lib/game/sim";
 import type { Body, GameState, MeetingRecord } from "@/lib/game/types";
 import { EndScreen } from "./EndScreen";
+import { CameraView } from "./CameraView";
 import { ActionBar, SidePanel, TopBar } from "./Hud";
 import { Meeting } from "./Meeting";
 import { PactDialog } from "./PactDialog";
@@ -135,6 +136,19 @@ export function Alibi() {
     }
   }, [game, overlay]);
 
+  const toggleCameras = useCallback(() => {
+    if (!game || overlay) return;
+    if (isWatching(game, "you")) stopWatching(game);
+    else if (canUseCameras(game)) startWatching(game);
+    setFrame((n) => n + 1);
+  }, [game, overlay]);
+
+  const leaveCameras = useCallback(() => {
+    if (!game) return;
+    stopWatching(game);
+    setFrame((n) => n + 1);
+  }, [game]);
+
   const offer = useCallback(() => {
     if (!game || overlay) return;
     const c = pactCandidate(game);
@@ -149,10 +163,11 @@ export function Alibi() {
       if (e.code === "KeyM") emergency();
       if (e.code === "KeyK") doKill();
       if (e.code === "KeyQ") offer();
+      if (e.code === "KeyC") toggleCameras();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [screen, report, emergency, doKill, offer]);
+  }, [screen, report, emergency, doKill, offer, toggleCameras]);
 
   const meetingDone = (record: MeetingRecord) => {
     if (!game) return;
@@ -181,13 +196,14 @@ export function Alibi() {
         <div className="flex flex-col gap-3">
           <div className="relative">
             <StationView state={game} paused={overlay !== null} useHeld={useHeld} onFrame={onFrame} />
+            {isWatching(game, "you") && !overlay ? <CameraView state={game} onLeave={leaveCameras} /> : null}
             {toast ? (
               <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
                 <p className="animate-rise rounded-full border border-glow/30 bg-abyss/90 px-4 py-1.5 text-center text-sm text-ink shadow-[0_0_24px_-8px_#5ce1e6] backdrop-blur">{toast}</p>
               </div>
             ) : null}
           </div>
-          <ActionBar state={game} useHeld={useHeld} onReport={report} onEmergency={emergency} onKill={doKill} onOffer={offer} />
+          <ActionBar state={game} useHeld={useHeld} onReport={report} onEmergency={emergency} onKill={doKill} onOffer={offer} onCameras={toggleCameras} />
         </div>
         <SidePanel state={game} />
       </div>

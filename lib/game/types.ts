@@ -36,6 +36,8 @@ export interface Character extends Persona {
   killCooldownUntil: number;
   /** AI killer: id it is hunting. */
   huntTarget?: string;
+  /** AI: heading to the camera desk to watch the feeds. */
+  errand?: "cams";
 }
 
 /** Ground truth: where someone was, from..to (game minutes). to=null while ongoing. */
@@ -111,6 +113,13 @@ export interface MeetingRecord {
   ejected?: string;
 }
 
+/** Someone sitting at the camera desk, from..to. */
+export interface CamSession {
+  who: string;
+  from: number;
+  to: number | null;
+}
+
 export interface PlayerTask {
   id: string;
   label: string;
@@ -139,6 +148,7 @@ export interface GameState {
   tasks: PlayerTask[];
   clues: string[];
   emergencyUsed: boolean;
+  camSessions: CamSession[];
   /** Set when the sim wants the UI to open something. */
   pending?: { kind: "meeting"; calledBy: string; reason: "body" | "emergency"; body?: Body } | { kind: "pact"; from: string; to: string };
   winner?: Side;

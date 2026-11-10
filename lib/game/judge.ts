@@ -1,6 +1,6 @@
 import { clock } from "./clock";
 import { locationName, PLACE_WORDS } from "./map";
-import { claimIsTrue, recollect } from "./memory";
+import { claimIsTrue, observe, recollect } from "./memory";
 import { byId } from "./rules";
 import type { Claim, GameState, LocationId, TranscriptLine } from "./types";
 
@@ -17,6 +17,8 @@ export interface Contradiction {
   to: number;
   /** Where the observer actually saw the speaker ("elsewhere"). */
   seenIn?: LocationId;
+  /** The observer saw this on a camera feed. */
+  camera?: boolean;
 }
 
 /** How many minutes `who` really spent in `loc` between from..to. */
@@ -33,7 +35,7 @@ export function minutesIn(state: GameState, who: string, loc: LocationId, from: 
 
 export function findContradictions(state: GameState, observer: string, speaker: string, claims: Claim[]): Contradiction[] {
   if (observer === speaker) return [];
-  const mem = recollect(state, observer, state.roundStart, state.t);
+  const mem = observe(state, observer, state.roundStart, state.t);
   const out: Contradiction[] = [];
   const seen = new Set<string>();
   for (const c of claims) {
@@ -44,9 +46,9 @@ export function findContradictions(state: GameState, observer: string, speaker: 
       // Check presence inside the overlapping minutes only, not anywhere in the observer's stay.
       const speakerHere = minutesIn(state, speaker, r.loc, a, b);
       let found: Contradiction | undefined;
-      if (r.loc === c.loc && speakerHere < 0.4) found = { kind: "absent", claim: c, from: a, to: b };
+      if (r.loc === c.loc && speakerHere < 0.4) found = { kind: "absent", claim: c, from: a, to: b, camera: r.camera };
       else if (r.loc !== c.loc && speakerHere >= 1 && minutesIn(state, speaker, c.loc, a, b) < 0.4) {
-        found = { kind: "elsewhere", claim: c, from: a, to: b, seenIn: r.loc };
+        found = { kind: "elsewhere", claim: c, from: a, to: b, seenIn: r.loc, camera: r.camera };
       }
       const key = found && `${found.kind}${found.claim.loc}${found.seenIn}`;
       if (found && key && !seen.has(key)) {
@@ -63,8 +65,8 @@ export function contradictionsFor(state: GameState, observer: string, speaker: s
   const name = byId(state, speaker).name;
   return findContradictions(state, observer, speaker, claims).map((x) =>
     x.kind === "absent"
-      ? `${name} says they were in ${locationName(x.claim.loc)} ${clock(x.claim.from)}–${clock(x.claim.to)}, but you were there ${clock(x.from)}–${clock(x.to)} and did not see them.`
-      : `${name} says they were in ${locationName(x.claim.loc)} around ${clock(x.from)}, but you saw them in ${locationName(x.seenIn!)} then.`,
+      ? `${name} says they were in ${locationName(x.claim.loc)} ${clock(x.claim.from)}–${clock(x.claim.to)}, but ${x.camera ? `you were watching that room on the camera` : "you were there"} ${clock(x.from)}–${clock(x.to)} and did not see them.`
+      : `${name} says they were in ${locationName(x.claim.loc)} around ${clock(x.from)}, but you saw them ${x.camera ? "on the camera " : ""}in ${locationName(x.seenIn!)} then.`,
   );
 }
 
@@ -74,8 +76,8 @@ export function confront(state: GameState, observer: string, speaker: string, cl
   if (!x) return undefined;
   const name = byId(state, speaker).name;
   return x.kind === "absent"
-    ? `${name}, you said you were in ${locationName(x.claim.loc)}, but I was there from ${clock(x.from)} to ${clock(x.to)} and never saw you.`
-    : `${name}, you said ${locationName(x.claim.loc)}, but I saw you in ${locationName(x.seenIn!)} around ${clock(x.from)}.`;
+    ? `${name}, you said you were in ${locationName(x.claim.loc)}, but ${x.camera ? "I was watching it on the camera" : "I was there"} from ${clock(x.from)} to ${clock(x.to)} and never saw you.`
+    : `${name}, you said ${locationName(x.claim.loc)}, but I saw you ${x.camera ? "on the camera " : ""}in ${locationName(x.seenIn!)} around ${clock(x.from)}.`;
 }
 
 /** Places a piece of text mentions, by any of their names. */

@@ -1,9 +1,10 @@
 import { diverDataUrl } from "@/lib/art/diver";
 import { drawConsole, drawFloor, drawProp, hexA } from "@/lib/art/props";
-import { CORRIDORS, ROOMS, WORLD, type Rect } from "@/lib/game/map";
+import { CAMERA_DESK, CAMERA_MOUNTS, CAMERA_ROOMS, CORRIDORS, ROOM_BY_ID, ROOMS, WORLD, type Rect } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
-import { killTarget, nearbyTask, pactCandidate } from "@/lib/game/sim";
-import type { Character, GameState, LocationId, Point } from "@/lib/game/types";
+import { camerasInUse, killTarget, nearbyTask, pactCandidate } from "@/lib/game/sim";
+import { clock } from "@/lib/game/clock";
+import type { Character, GameState, LocationId, Point, RoomId } from "@/lib/game/types";
 
 /** The camera's view, in world units. The canvas keeps this aspect ratio. */
 export const VIEW = { w: 960, h: 600 };
@@ -133,6 +134,132 @@ function drawBody(ctx: CanvasRenderingContext2D, c: Character, pos: Point, time:
   ctx.strokeStyle = hexA(PAL.ember, 0.25 + pulse * 0.35);
   ctx.lineWidth = 2.5;
   ctx.stroke();
+}
+
+// ---- Cameras -------------------------------------------------------------------------------
+
+/** A wall-mounted camera. Its light glows red while anyone is watching the feeds. */
+function drawCameraMount(ctx: CanvasRenderingContext2D, p: Point, room: RoomId, live: boolean, time: number) {
+  const r = ROOM_BY_ID[room].rect;
+  // aim at the room's centre
+  const a = Math.atan2(r.y + r.h / 2 - p.y, r.x + r.w / 2 - p.x);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.scale(1.5, 1.5);
+  ctx.beginPath();
+  ctx.arc(0, 0, 7, 0, Math.PI * 2);
+  ctx.fillStyle = "#2d3a60";
+  ctx.fill();
+  ctx.rotate(a);
+  ctx.beginPath();
+  ctx.roundRect(2, -6, 20, 12, 3);
+  ctx.fillStyle = "#cfd6e8";
+  ctx.fill();
+  ctx.strokeStyle = "#05070d";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(22, 0, 4, 0, Math.PI * 2);
+  ctx.fillStyle = "#0b1020";
+  ctx.fill();
+  ctx.restore();
+  const on = live && Math.sin(time * 6) > -0.3;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+  ctx.fillStyle = on ? "#ff3b55" : "#4a1a22";
+  if (on) {
+    ctx.shadowColor = "#ff3b55";
+    ctx.shadowBlur = 12;
+  }
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  if (live) {
+    // a faint view cone so the room feels watched
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(a);
+    const g = ctx.createLinearGradient(0, 0, 220, 0);
+    g.addColorStop(0, "rgba(255,59,85,0.18)");
+    g.addColorStop(1, "rgba(255,59,85,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(240, -110);
+    ctx.lineTo(240, 110);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/**
+ * One live camera feed: the room, its furniture and whoever is in it, framed to fit w×h
+ * pixels, with scanlines, grain, a REC light and a timestamp. Draws in pixel space.
+ */
+export function drawCameraFeed(ctx: CanvasRenderingContext2D, state: GameState, room: RoomId, index: number, w: number, h: number, time: number) {
+  const def = ROOM_BY_ID[room];
+  const r = def.rect;
+  const pad = 26;
+  const scale = Math.min(w / (r.w + pad * 2), h / (r.h + pad * 2));
+  ctx.save();
+  ctx.fillStyle = "#03050a";
+  ctx.fillRect(0, 0, w, h);
+  ctx.translate(w / 2 - (r.x + r.w / 2) * scale, h / 2 - (r.y + r.h / 2) * scale);
+  ctx.scale(scale, scale);
+
+  drawFloor(ctx, def, true, time);
+  for (const prop of def.props.filter((p) => !p.solid)) drawProp(ctx, prop, def, time);
+  for (const b of state.bodies) {
+    if (b.foundAt !== undefined || b.loc !== room) continue;
+    drawBody(ctx, state.characters.find((c) => c.id === b.victim)!, b.pos, time);
+  }
+  type Drawable = { y: number; draw: () => void };
+  const items: Drawable[] = [];
+  for (const prop of def.props.filter((p) => p.solid)) {
+    const s = prop.shape;
+    const bottom = s.type === "rect" ? s.y + s.h : s.type === "circle" ? s.y + s.r * 0.4 : s.y + s.ry * 0.3;
+    items.push({ y: bottom, draw: () => drawProp(ctx, prop, def, time) });
+  }
+  for (const c of def.consoles) items.push({ y: c.y - 16, draw: () => drawConsole(ctx, c.x, c.y, def.tint, time) });
+  for (const c of state.characters.filter((c) => c.alive && c.loc === room)) items.push({ y: c.pos.y, draw: () => drawDiver(ctx, c, time) });
+  for (const it of items.sort((a, b) => a.y - b.y)) it.draw();
+  ctx.restore();
+
+  // CCTV look: tint, scanlines, grain, rolling bar
+  ctx.fillStyle = "rgba(40,90,80,0.16)";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  for (let y = 0; y < h; y += 3) ctx.fillRect(0, y, w, 1);
+  const bar = ((time * 40 + index * 57) % (h + 60)) - 30;
+  ctx.fillStyle = "rgba(255,255,255,0.04)";
+  ctx.fillRect(0, bar, w, 24);
+  for (let i = 0; i < 60; i++) {
+    const nx = ((i * 7919 + Math.floor(time * 24) * 104729) % 1000) / 1000;
+    const ny = ((i * 104729 + Math.floor(time * 24) * 7919) % 1000) / 1000;
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    ctx.fillRect(nx * w, ny * h, 1.5, 1.5);
+  }
+  const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, w * 0.7);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, w, h);
+
+  // overlay text
+  ctx.font = "600 12px ui-monospace, SFMono-Regular, monospace";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(233,236,245,0.9)";
+  ctx.fillText(`CAM ${index + 1} · ${def.name.toUpperCase()}`, 12, 22);
+  ctx.textAlign = "right";
+  ctx.fillText(clock(state.t), w - 12, h - 12);
+  if (Math.sin(time * 4) > -0.2) {
+    ctx.beginPath();
+    ctx.arc(w - 46, 18, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff3b55";
+    ctx.fill();
+  }
+  ctx.fillStyle = "#ff3b55";
+  ctx.fillText("REC", w - 12, 22);
 }
 
 // ---- Station ------------------------------------------------------------------------------
@@ -299,6 +426,21 @@ export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, tim
     drawBody(ctx, state.characters.find((c) => c.id === b.victim)!, b.pos, time);
   }
 
+  // the camera desk in Comms: a cyan floor marker with a sign
+  {
+    const p = CAMERA_DESK;
+    const pulse = (Math.sin(time * 2.4) + 1) / 2;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 6, 24, 10, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = hexA(PAL.glow, 0.45 + pulse * 0.35);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = hexA(PAL.glow, 0.85);
+    ctx.fillText("CAMERAS", p.x, p.y + 30);
+  }
+
   // furniture and people sorted by depth, so you can walk in front of and behind things
   type Drawable = { y: number; draw: () => void };
   const items: Drawable[] = [];
@@ -309,6 +451,11 @@ export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, tim
       items.push({ y: bottom, draw: () => drawProp(ctx, prop, room, time) });
     }
     for (const c of room.consoles) items.push({ y: c.y - 16, draw: () => drawConsole(ctx, c.x, c.y, room.tint, time) });
+  }
+  const live = camerasInUse(state);
+  for (const room of CAMERA_ROOMS) {
+    const p = CAMERA_MOUNTS[room]!;
+    items.push({ y: p.y - 40, draw: () => drawCameraMount(ctx, p, room, live, time) });
   }
   const target = killTarget(state)?.id;
   const offer = pactCandidate(state)?.id;

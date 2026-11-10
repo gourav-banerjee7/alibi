@@ -83,7 +83,7 @@ export const ROOMS: Room[] = [
     name: "Comms",
     rect: { x: 520, y: 80, w: 400, h: 300 },
     tint: "#8B93FF",
-    consoles: [{ x: 640, y: 160 }, { x: 630, y: 280 }],
+    consoles: [{ x: 640, y: 160 }, { x: 800, y: 162 }],
     props: [
       solid("sonarwall", rect(560, 90, 320, 42)),
       solid("desk", rect(556, 300, 150, 52)),
@@ -189,6 +189,22 @@ export const CORRIDORS: Corridor[] = [
 ];
 
 export const ROOM_BY_ID = Object.fromEntries(ROOMS.map((r) => [r.id, r])) as Record<RoomId, Room>;
+
+// ---- Security cameras -----------------------------------------------------------------------
+
+/** Rooms with a security camera. The rest (and every tube) are blind spots. */
+export const CAMERA_ROOMS: RoomId[] = ["dock", "lab", "reactor", "medbay"];
+
+/** Where each camera hangs: an upper corner of its room, away from the door sign. */
+export const CAMERA_MOUNTS: Record<string, Point> = {
+  dock: { x: 428, y: 494 },
+  lab: { x: 1094, y: 94 },
+  reactor: { x: 1906, y: 786 },
+  medbay: { x: 906, y: 914 },
+};
+
+/** Stand here, at the monitor desk in Comms, to watch the feeds. */
+export const CAMERA_DESK: Point = { x: 631, y: 284 };
 
 export function isRoom(loc: LocationId): loc is RoomId {
   return !loc.startsWith("c-");
