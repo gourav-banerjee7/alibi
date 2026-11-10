@@ -6,10 +6,11 @@ import { KILL_COOLDOWN, seatInMess } from "./setup";
 import type { Body, Character, GameState, Point } from "./types";
 
 export const STEP = 0.05; // fixed sim step in real seconds (= game minutes)
-const PLAYER_SPEED = 75;
-const AI_SPEED = 58;
-const KILL_RANGE = 34;
-const USE_RANGE = 28;
+const PLAYER_SPEED = 150;
+const AI_SPEED = 116;
+const KILL_RANGE = 62;
+const USE_RANGE = 44;
+const TALK_RANGE = 240;
 const TASK_SECONDS = 2.5;
 
 export interface Input {
@@ -133,7 +134,7 @@ function aiKiller(state: GameState, c: Character): boolean {
     you.loc === c.loc &&
     othersInLoc(state, c).length === 1 &&
     state.t - state.roundStart > 8 &&
-    dist(c.pos, you.pos) < 120
+    dist(c.pos, you.pos) < TALK_RANGE
   ) {
     c.path = [];
     state.pending = { kind: "pact", from: c.id, to: "you" };
@@ -179,7 +180,7 @@ function aiReports(state: GameState) {
   for (const body of state.bodies) {
     if (body.foundAt !== undefined) continue;
     const finder = state.characters.find(
-      (c) => c.alive && !c.isPlayer && c.role !== "killer" && c.loc === body.loc && dist(c.pos, body.pos) < 160,
+      (c) => c.alive && !c.isPlayer && c.role !== "killer" && c.loc === body.loc && dist(c.pos, body.pos) < 420,
     );
     if (finder) {
       callMeeting(state, finder.id, "body", body);
@@ -224,7 +225,7 @@ export function pactCandidate(state: GameState): Character | undefined {
   if (others.length !== 1) return undefined;
   const other = others[0]!;
   if (other.role !== "crew" || state.pactOffers.some((o) => o.from === "you" && o.to === other.id)) return undefined;
-  return dist(other.pos, you.pos) < 120 ? other : undefined;
+  return dist(other.pos, you.pos) < TALK_RANGE ? other : undefined;
 }
 
 export function nearbyTask(state: GameState) {

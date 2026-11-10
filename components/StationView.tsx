@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { WORLD, locationAt } from "@/lib/game/map";
+import { walkable } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
 import { STEP, tick, walkTo, type Input } from "@/lib/game/sim";
 import type { GameState } from "@/lib/game/types";
-import { drawStation } from "@/lib/render";
+import { cameraFor, drawStation, VIEW } from "@/lib/render";
 
 const KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, -1],
@@ -77,8 +77,8 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = canvas.clientWidth;
       canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round((w * WORLD.height) / WORLD.width) * dpr;
-      ctx.setTransform((canvas.width / WORLD.width), 0, 0, canvas.height / WORLD.height, 0, 0);
+      canvas.height = Math.round(((w * VIEW.h) / VIEW.w) * dpr);
+      ctx.setTransform(canvas.width / VIEW.w, 0, 0, canvas.height / VIEW.h, 0, 0);
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -128,8 +128,9 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
     const s = stateRef.current;
     if (pausedRef.current || s.phase !== "roam") return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const p = { x: ((e.clientX - rect.left) / rect.width) * WORLD.width, y: ((e.clientY - rect.top) / rect.height) * WORLD.height };
-    if (!locationAt(p)) return;
+    const cam = cameraFor(s);
+    const p = { x: cam.x + ((e.clientX - rect.left) / rect.width) * VIEW.w, y: cam.y + ((e.clientY - rect.top) / rect.height) * VIEW.h };
+    if (!walkable(p)) return;
     walkTo(player(s), p);
   }, []);
 
@@ -138,7 +139,7 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
       ref={canvasRef}
       onPointerDown={onPointer}
       className="block w-full touch-none select-none rounded-2xl border border-line bg-abyss shadow-[0_0_60px_-30px_#5ce1e6]"
-      style={{ aspectRatio: `${WORLD.width} / ${WORLD.height}` }}
+      style={{ aspectRatio: `${VIEW.w} / ${VIEW.h}` }}
       aria-label="Station map. Move with WASD or arrow keys, or click where you want to go."
     />
   );

@@ -1,12 +1,53 @@
 import type { LocationId, Point, RoomId } from "./types";
 
-export const WORLD = { width: 1000, height: 640 };
+/**
+ * Halcyon-9. World units; the camera shows roughly a third of this at a time.
+ * Every room has furniture ("props"). Solid props block movement for everyone,
+ * and the AI waypoint graph is laid out so no route crosses one.
+ */
+export const WORLD = { width: 2000, height: 1280 };
+
+/** Radius of a diver's footprint for collision. */
+export const BODY_RADIUS = 14;
 
 export interface Rect {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+export type Shape =
+  | ({ type: "rect" } & Rect)
+  | { type: "circle"; x: number; y: number; r: number }
+  | { type: "ellipse"; x: number; y: number; rx: number; ry: number };
+
+export type PropKind =
+  | "moonpool"
+  | "crates"
+  | "ballast"
+  | "lockers"
+  | "sonarwall"
+  | "desk"
+  | "rack"
+  | "bench"
+  | "tank"
+  | "table"
+  | "galley"
+  | "core"
+  | "coolant"
+  | "pipes"
+  | "bed"
+  | "cabinet"
+  | "scanner"
+  | "planter"
+  | "pump";
+
+export interface Prop {
+  kind: PropKind;
+  shape: Shape;
+  /** Solid props block movement. Floor decals (like the scanner pad) don't. */
+  solid: boolean;
 }
 
 export interface Room {
@@ -17,16 +58,101 @@ export interface Room {
   tint: string;
   /** Spots where someone can stand at a console. */
   consoles: Point[];
+  props: Prop[];
 }
 
+const rect = (x: number, y: number, w: number, h: number): Shape => ({ type: "rect", x, y, w, h });
+const solid = (kind: PropKind, shape: Shape): Prop => ({ kind, shape, solid: true });
+
 export const ROOMS: Room[] = [
-  { id: "dock", name: "Sub Dock", rect: { x: 40, y: 240, w: 180, h: 160 }, tint: "#38D6F5", consoles: [{ x: 80, y: 280 }, { x: 180, y: 370 }] },
-  { id: "comms", name: "Comms", rect: { x: 260, y: 40, w: 200, h: 150 }, tint: "#8B93FF", consoles: [{ x: 300, y: 80 }, { x: 400, y: 80 }] },
-  { id: "lab", name: "Bio Lab", rect: { x: 540, y: 40, w: 200, h: 150 }, tint: "#3EE0C8", consoles: [{ x: 600, y: 80 }, { x: 700, y: 160 }] },
-  { id: "mess", name: "Mess Hall", rect: { x: 400, y: 250, w: 200, h: 140 }, tint: "#FFB547", consoles: [{ x: 500, y: 320 }] },
-  { id: "reactor", name: "Reactor", rect: { x: 780, y: 240, w: 180, h: 160 }, tint: "#FF6B7D", consoles: [{ x: 920, y: 280 }, { x: 830, y: 370 }] },
-  { id: "medbay", name: "Medbay", rect: { x: 260, y: 450, w: 200, h: 150 }, tint: "#5BE49B", consoles: [{ x: 300, y: 570 }, { x: 410, y: 480 }] },
-  { id: "hydro", name: "Hydroponics", rect: { x: 540, y: 450, w: 200, h: 150 }, tint: "#B5E853", consoles: [{ x: 700, y: 570 }, { x: 590, y: 560 }] },
+  {
+    id: "dock",
+    name: "Sub Dock",
+    rect: { x: 80, y: 480, w: 360, h: 320 },
+    tint: "#38D6F5",
+    consoles: [{ x: 360, y: 548 }, { x: 150, y: 742 }],
+    props: [
+      solid("moonpool", rect(104, 504, 132, 104)),
+      solid("crates", rect(330, 700, 92, 82)),
+      solid("ballast", rect(300, 492, 120, 30)),
+      solid("lockers", rect(92, 770, 120, 22)),
+    ],
+  },
+  {
+    id: "comms",
+    name: "Comms",
+    rect: { x: 520, y: 80, w: 400, h: 300 },
+    tint: "#8B93FF",
+    consoles: [{ x: 640, y: 160 }, { x: 630, y: 280 }],
+    props: [
+      solid("sonarwall", rect(560, 90, 320, 42)),
+      solid("desk", rect(556, 300, 150, 52)),
+      solid("rack", rect(532, 160, 40, 104)),
+    ],
+  },
+  {
+    id: "lab",
+    name: "Bio Lab",
+    rect: { x: 1080, y: 80, w: 400, h: 300 },
+    tint: "#3EE0C8",
+    consoles: [{ x: 1380, y: 178 }, { x: 1380, y: 282 }],
+    props: [
+      solid("bench", rect(1300, 98, 164, 52)),
+      solid("bench", rect(1300, 306, 164, 52)),
+      solid("tank", { type: "circle", x: 1122, y: 128, r: 24 }),
+      solid("tank", { type: "circle", x: 1180, y: 128, r: 24 }),
+      solid("tank", { type: "circle", x: 1238, y: 128, r: 24 }),
+    ],
+  },
+  {
+    id: "mess",
+    name: "Mess Hall",
+    rect: { x: 800, y: 500, w: 400, h: 280 },
+    tint: "#FFB547",
+    consoles: [{ x: 1000, y: 572 }],
+    props: [
+      solid("table", { type: "ellipse", x: 1000, y: 650, rx: 92, ry: 50 }),
+      solid("galley", rect(1152, 748, 40, 26)),
+    ],
+  },
+  {
+    id: "reactor",
+    name: "Reactor",
+    rect: { x: 1560, y: 480, w: 360, h: 320 },
+    tint: "#FF6B7D",
+    consoles: [{ x: 1720, y: 762 }, { x: 1640, y: 548 }],
+    props: [
+      solid("core", { type: "circle", x: 1822, y: 640, r: 56 }),
+      solid("coolant", rect(1576, 712, 92, 74)),
+      solid("pipes", rect(1780, 488, 132, 24)),
+    ],
+  },
+  {
+    id: "medbay",
+    name: "Medbay",
+    rect: { x: 520, y: 900, w: 400, h: 300 },
+    tint: "#5BE49B",
+    consoles: [{ x: 590, y: 962 }, { x: 680, y: 1108 }],
+    props: [
+      solid("bed", rect(556, 1130, 104, 56)),
+      solid("bed", rect(700, 1130, 104, 56)),
+      solid("cabinet", rect(536, 908, 104, 30)),
+      { kind: "scanner", shape: { type: "circle", x: 852, y: 1110, r: 34 }, solid: false },
+    ],
+  },
+  {
+    id: "hydro",
+    name: "Hydroponics",
+    rect: { x: 1080, y: 900, w: 400, h: 300 },
+    tint: "#B5E853",
+    consoles: [{ x: 1350, y: 988 }, { x: 1200, y: 1090 }],
+    props: [
+      solid("planter", rect(1232, 918, 230, 38)),
+      solid("planter", rect(1112, 1112, 350, 34)),
+      solid("planter", rect(1112, 1158, 350, 32)),
+      solid("pump", { type: "circle", x: 1438, y: 1040, r: 22 }),
+    ],
+  },
 ];
 
 export interface Corridor {
@@ -36,28 +162,28 @@ export interface Corridor {
 }
 
 export const CORRIDORS: Corridor[] = [
-  { id: "c-west", name: "west corridor", rects: [{ x: 220, y: 300, w: 180, h: 40 }] },
-  { id: "c-east", name: "east corridor", rects: [{ x: 600, y: 300, w: 180, h: 40 }] },
-  { id: "c-comms", name: "comms hatch", rects: [{ x: 415, y: 190, w: 40, h: 60 }] },
-  { id: "c-lab", name: "lab hatch", rects: [{ x: 545, y: 190, w: 40, h: 60 }] },
-  { id: "c-medbay", name: "medbay hatch", rects: [{ x: 415, y: 390, w: 40, h: 60 }] },
-  { id: "c-hydro", name: "hydro hatch", rects: [{ x: 545, y: 390, w: 40, h: 60 }] },
-  { id: "c-north", name: "north tube", rects: [{ x: 460, y: 95, w: 80, h: 40 }] },
-  { id: "c-south", name: "south tube", rects: [{ x: 460, y: 505, w: 80, h: 40 }] },
+  { id: "c-west", name: "west corridor", rects: [{ x: 440, y: 600, w: 360, h: 80 }] },
+  { id: "c-east", name: "east corridor", rects: [{ x: 1200, y: 600, w: 360, h: 80 }] },
+  { id: "c-comms", name: "comms hatch", rects: [{ x: 830, y: 380, w: 80, h: 120 }] },
+  { id: "c-lab", name: "lab hatch", rects: [{ x: 1090, y: 380, w: 80, h: 120 }] },
+  { id: "c-medbay", name: "medbay hatch", rects: [{ x: 830, y: 780, w: 80, h: 120 }] },
+  { id: "c-hydro", name: "hydro hatch", rects: [{ x: 1090, y: 780, w: 80, h: 120 }] },
+  { id: "c-north", name: "north tube", rects: [{ x: 920, y: 190, w: 160, h: 80 }] },
+  { id: "c-south", name: "south tube", rects: [{ x: 920, y: 1010, w: 160, h: 80 }] },
   {
     id: "c-reactor",
     name: "reactor tube",
     rects: [
-      { x: 740, y: 100, w: 140, h: 40 },
-      { x: 840, y: 100, w: 40, h: 140 },
+      { x: 1480, y: 200, w: 280, h: 80 },
+      { x: 1680, y: 200, w: 80, h: 280 },
     ],
   },
   {
     id: "c-dock",
     name: "dock tube",
     rects: [
-      { x: 110, y: 400, w: 40, h: 125 },
-      { x: 110, y: 485, w: 150, h: 40 },
+      { x: 220, y: 800, w: 80, h: 250 },
+      { x: 220, y: 970, w: 300, h: 80 },
     ],
   },
 ];
@@ -93,59 +219,84 @@ export function locationAt(p: Point): LocationId | undefined {
   return undefined;
 }
 
-const BODY_RADIUS = 9;
+const FLOOR_RECTS: Rect[] = [...ROOMS.map((r) => r.rect), ...CORRIDORS.flatMap((c) => c.rects)];
+const SOLIDS: Shape[] = ROOMS.flatMap((r) => r.props.filter((p) => p.solid).map((p) => p.shape));
 
-export function walkable(p: Point): boolean {
-  // The whole body circle must fit inside the union of rects. Checking the centre plus
-  // four edge points is enough for axis-aligned rects this size.
-  const probes = [p, { x: p.x - BODY_RADIUS, y: p.y }, { x: p.x + BODY_RADIUS, y: p.y }, { x: p.x, y: p.y - BODY_RADIUS }, { x: p.x, y: p.y + BODY_RADIUS }];
-  const rects = [...ROOMS.map((r) => r.rect), ...CORRIDORS.flatMap((c) => c.rects)];
-  return probes.every((q) => rects.some((r) => inRect(q, r)));
+/** Does a circle of radius `r` at p overlap the shape? */
+export function hitsShape(p: Point, s: Shape, r: number): boolean {
+  switch (s.type) {
+    case "rect": {
+      const cx = Math.max(s.x, Math.min(p.x, s.x + s.w));
+      const cy = Math.max(s.y, Math.min(p.y, s.y + s.h));
+      return Math.hypot(p.x - cx, p.y - cy) < r;
+    }
+    case "circle":
+      return Math.hypot(p.x - s.x, p.y - s.y) < s.r + r;
+    case "ellipse": {
+      const dx = (p.x - s.x) / (s.rx + r);
+      const dy = (p.y - s.y) / (s.ry + r);
+      return dx * dx + dy * dy < 1;
+    }
+  }
+}
+
+/** Can a diver of radius `r` stand at p: on the floor and clear of furniture? */
+export function walkable(p: Point, r = BODY_RADIUS): boolean {
+  const probes = [p, { x: p.x - r, y: p.y }, { x: p.x + r, y: p.y }, { x: p.x, y: p.y - r }, { x: p.x, y: p.y + r }];
+  if (!probes.every((q) => FLOOR_RECTS.some((f) => inRect(q, f)))) return false;
+  return !SOLIDS.some((s) => hitsShape(p, s, r));
 }
 
 // ---- Waypoint graph for AI movement -------------------------------------------------------
 
 export const NODES: Record<string, Point> = {
-  dock: { x: 130, y: 320 },
-  comms: { x: 360, y: 115 },
-  lab: { x: 640, y: 115 },
-  mess: { x: 500, y: 320 },
-  reactor: { x: 870, y: 320 },
-  medbay: { x: 360, y: 525 },
-  hydro: { x: 640, y: 525 },
-  "comms-door": { x: 435, y: 170 },
-  "mess-nw": { x: 435, y: 270 },
-  "lab-door": { x: 565, y: 170 },
-  "mess-ne": { x: 565, y: 270 },
-  "medbay-door": { x: 435, y: 470 },
-  "mess-sw": { x: 435, y: 370 },
-  "hydro-door": { x: 565, y: 470 },
-  "mess-se": { x: 565, y: 370 },
-  "lab-east": { x: 720, y: 120 },
-  "reactor-bend": { x: 860, y: 120 },
-  "reactor-door": { x: 860, y: 260 },
-  "dock-door": { x: 130, y: 380 },
-  "dock-bend": { x: 130, y: 505 },
-  "medbay-west": { x: 280, y: 505 },
+  dock: { x: 260, y: 640 },
+  comms: { x: 720, y: 230 },
+  lab: { x: 1280, y: 230 },
+  mess: { x: 1000, y: 545 },
+  reactor: { x: 1700, y: 640 },
+  medbay: { x: 720, y: 1050 },
+  hydro: { x: 1280, y: 1050 },
+  "mess-w": { x: 840, y: 640 },
+  "mess-e": { x: 1160, y: 640 },
+  "mess-nw": { x: 870, y: 545 },
+  "mess-ne": { x: 1130, y: 545 },
+  "mess-sw": { x: 870, y: 738 },
+  "mess-se": { x: 1130, y: 738 },
+  "comms-door": { x: 870, y: 340 },
+  "lab-door": { x: 1130, y: 340 },
+  "medbay-door": { x: 870, y: 940 },
+  "hydro-door": { x: 1130, y: 940 },
+  "lab-east": { x: 1440, y: 240 },
+  "reactor-bend": { x: 1720, y: 240 },
+  "reactor-door": { x: 1720, y: 520 },
+  "dock-door": { x: 260, y: 760 },
+  "dock-bend": { x: 260, y: 1010 },
+  "medbay-west": { x: 560, y: 1010 },
 };
 
 const EDGES: Array<[string, string]> = [
-  ["dock", "mess"],
-  ["mess", "reactor"],
+  // ring around the mess table
+  ["mess-w", "mess-nw"],
+  ["mess-nw", "mess"],
+  ["mess", "mess-ne"],
+  ["mess-ne", "mess-e"],
+  ["mess-e", "mess-se"],
+  ["mess-se", "mess-sw"],
+  ["mess-sw", "mess-w"],
+  // spokes
+  ["dock", "mess-w"],
+  ["mess-e", "reactor"],
   ["comms", "lab"],
   ["medbay", "hydro"],
   ["comms", "comms-door"],
   ["comms-door", "mess-nw"],
-  ["mess-nw", "mess"],
   ["lab", "lab-door"],
   ["lab-door", "mess-ne"],
-  ["mess-ne", "mess"],
   ["medbay", "medbay-door"],
   ["medbay-door", "mess-sw"],
-  ["mess-sw", "mess"],
   ["hydro", "hydro-door"],
   ["hydro-door", "mess-se"],
-  ["mess-se", "mess"],
   ["lab", "lab-east"],
   ["lab-east", "reactor-bend"],
   ["reactor-bend", "reactor-door"],
@@ -156,6 +307,8 @@ const EDGES: Array<[string, string]> = [
   ["medbay-west", "medbay"],
 ];
 
+export const GRAPH_EDGES = EDGES;
+
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const ADJ: Record<string, string[]> = {};
@@ -164,9 +317,19 @@ for (const [a, b] of EDGES) {
   (ADJ[b] ??= []).push(a);
 }
 
-/** Nearest node reachable in a straight walkable line from p. */
-function nearestNode(p: Point): string {
-  let best = "mess";
+/** Is the straight line a→b clear for a diver? */
+export function straightWalkable(a: Point, b: Point, r = BODY_RADIUS): boolean {
+  const steps = Math.ceil(dist(a, b) / 8);
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    if (!walkable({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, r)) return false;
+  }
+  return true;
+}
+
+/** Nearest node reachable in a straight clear line from p. */
+export function nearestNode(p: Point): string | undefined {
+  let best: string | undefined;
   let bestD = Infinity;
   for (const [id, n] of Object.entries(NODES)) {
     const d = dist(p, n);
@@ -178,21 +341,12 @@ function nearestNode(p: Point): string {
   return best;
 }
 
-export function straightWalkable(a: Point, b: Point): boolean {
-  const steps = Math.ceil(dist(a, b) / 6);
-  for (let i = 0; i <= steps; i++) {
-    const t = steps === 0 ? 0 : i / steps;
-    const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    if (!locationAt(q)) return false;
-  }
-  return true;
-}
-
 /** Dijkstra over the waypoint graph. Returns points to walk through, ending at `to`. */
 export function findPath(from: Point, to: Point): Point[] {
-  if (straightWalkable(from, to) && locationAt(from) === locationAt(to)) return [to];
+  if (straightWalkable(from, to)) return [to];
   const start = nearestNode(from);
   const goal = nearestNode(to);
+  if (!start || !goal) return [];
   const d: Record<string, number> = { [start]: 0 };
   const prev: Record<string, string> = {};
   const open = new Set([start]);
@@ -216,12 +370,31 @@ export function findPath(from: Point, to: Point): Point[] {
     nodes.unshift(n);
     if (n === start) break;
   }
-  return [...nodes.map((n) => NODES[n]!), to];
+  return smooth(from, [...nodes.map((n) => NODES[n]!), to]);
 }
 
-/** A random standing spot inside a room, away from the walls. */
+/** Skip waypoints when a later one is already in clear view, so walks don't zig-zag. */
+function smooth(from: Point, path: Point[]): Point[] {
+  const out: Point[] = [];
+  let cur = from;
+  let i = 0;
+  while (i < path.length) {
+    let j = path.length - 1;
+    while (j > i && !straightWalkable(cur, path[j]!)) j--;
+    out.push(path[j]!);
+    cur = path[j]!;
+    i = j + 1;
+  }
+  return out;
+}
+
+/** A random standing spot inside a room: clear of furniture and in view of a waypoint. */
 export function spotInRoom(room: RoomId, r: () => number): Point {
   const { rect } = ROOM_BY_ID[room];
-  const pad = 22;
-  return { x: rect.x + pad + r() * (rect.w - pad * 2), y: rect.y + pad + r() * (rect.h - pad * 2) };
+  const pad = BODY_RADIUS + 10;
+  for (let i = 0; i < 40; i++) {
+    const p = { x: rect.x + pad + r() * (rect.w - pad * 2), y: rect.y + pad + r() * (rect.h - pad * 2) };
+    if (walkable(p) && nearestNode(p)) return p;
+  }
+  return { ...NODES[room]! };
 }

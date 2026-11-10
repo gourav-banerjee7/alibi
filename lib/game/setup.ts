@@ -81,5 +81,5 @@ export function newGame(seed: number, startRole: StartRole = "crew"): GameState 
 /** Spread everyone around the mess table at the start of each round. */
 export function seatInMess(i: number, n: number) {
   const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-  return { x: 500 + Math.cos(angle) * 60, y: 320 + Math.sin(angle) * 42 };
+  return { x: 1000 + Math.cos(angle) * 128, y: 650 + Math.sin(angle) * 82 };
 }
