@@ -5,7 +5,7 @@ import { clock } from "@/lib/game/clock";
 import { locationName } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
 import { MAX_MEETINGS } from "@/lib/game/setup";
-import { canCallEmergency, canUseCameras, isWatching, killBlockedReason, killTarget, nearbyTask, pactCandidate, visibleBody } from "@/lib/game/sim";
+import { canCallEmergency, canSabotage, canUseCameras, isWatching, killBlockedReason, killTarget, nearbyFix, nearbyTask, pactCandidate, visibleBody } from "@/lib/game/sim";
 import type { GameState } from "@/lib/game/types";
 import type { DirectorStatus } from "@/lib/ai/director";
 import { DiverIcon } from "./DiverIcon";
@@ -110,6 +110,37 @@ export function SidePanel({ state }: { state: GameState }) {
   );
 }
 
+function sabotageSub(state: GameState): string | undefined {
+  if (state.sabotage) return "already active";
+  const wait = Math.ceil(state.sabotageReadyAt - state.t);
+  return wait > 0 ? `ready in ${wait}s` : undefined;
+}
+
+/** The alarm strip over the map while a sabotage is active. */
+export function SabotageBanner({ state }: { state: GameState }) {
+  const sab = state.sabotage;
+  if (!sab) return null;
+  const isBreach = sab.kind === "breach";
+  const left = isBreach && sab.deadline !== undefined ? Math.max(0, Math.ceil(sab.deadline - state.t)) : null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-3">
+      <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border px-4 py-2 text-sm shadow-lg backdrop-blur ${isBreach ? "border-coral/70 bg-coral-dim/85" : "border-line-strong bg-abyss/90"}`}>
+        <span className={`font-bold uppercase tracking-[0.14em] ${isBreach ? "text-coral" : "text-ink"}`}>
+          {isBreach ? "Hull breach" : "Blackout"}
+        </span>
+        {left !== null ? <span className={`font-mono text-lg font-bold tabular-nums ${left <= 10 ? "animate-pulse text-coral" : "text-ink"}`}>0:{String(left).padStart(2, "0")}</span> : null}
+        <span className="text-muted">{isBreach ? "Close both valves:" : "Restore power at the"}</span>
+        {sab.fixes.map((f) => (
+          <span key={f.id} className={`inline-flex items-center gap-1.5 ${f.done ? "text-kelp" : "text-ink"}`}>
+            <span className={`h-2 w-2 rounded-full ${f.done ? "bg-kelp" : "animate-pulse bg-coral"}`} />
+            {f.label} · {locationName(f.room)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface ActionProps {
   state: GameState;
   useHeld: React.MutableRefObject<boolean>;
@@ -118,6 +149,7 @@ interface ActionProps {
   onKill: () => void;
   onOffer: () => void;
   onCameras: () => void;
+  onSabotage: (kind: "blackout" | "breach") => void;
 }
 
 type Tone = "glow" | "ember" | "coral" | "orchid" | "plain";
@@ -152,16 +184,17 @@ function Btn(props: { label: string; hint: string; onClick?: () => void; disable
   );
 }
 
-export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer, onCameras }: ActionProps) {
+export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer, onCameras, onSabotage }: ActionProps) {
   const you = player(state);
-  const task = nearbyTask(state);
+  const fix = nearbyFix(state);
+  const task = fix ?? nearbyTask(state);
   const body = visibleBody(state);
   const isKiller = you.role === "killer";
   const target = killTarget(state);
   const offer = pactCandidate(state);
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Btn label="Use" hint="hold E / Space" tone="glow" holdRef={useHeld} disabled={!task} sub={task ? task.label : "stand on a dashed ring"} />
+      <Btn label={fix ? "Fix" : "Use"} hint="hold E / Space" tone={fix ? "coral" : "glow"} holdRef={useHeld} disabled={!task} sub={task ? task.label : "stand on a dashed ring"} />
       <Btn label="Report body" hint="R" tone="ember" onClick={onReport} disabled={!body} />
       <Btn
         label={isWatching(state, "you") ? "Leave cameras" : "Cameras"}
@@ -175,6 +208,8 @@ export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOff
         <>
           <Btn label="Kill" hint="K" tone="coral" onClick={onKill} disabled={!target} sub={target ? target.name : killBlockedReason(state)} />
           <Btn label="Offer a deal" hint="Q" tone="orchid" onClick={onOffer} disabled={!offer} sub={offer ? `to ${offer.name}` : "get someone alone"} />
+          <Btn label="Blackout" hint="B" tone="coral" onClick={() => onSabotage("blackout")} disabled={!canSabotage(state, "you")} sub={sabotageSub(state)} />
+          <Btn label="Hull breach" hint="V" tone="coral" onClick={() => onSabotage("breach")} disabled={!canSabotage(state, "you")} sub={sabotageSub(state)} />
         </>
       ) : null}
     </div>

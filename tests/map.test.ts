@@ -69,3 +69,14 @@ describe("walking into furniture", () => {
     }
   });
 });
+
+describe("sabotage fix stations", () => {
+  it("are standable, in their rooms, and reachable", async () => {
+    const { FIX_STATIONS } = await import("@/lib/game/map");
+    for (const [id, f] of Object.entries(FIX_STATIONS)) {
+      expect(walkable(f.pos), id).toBe(true);
+      expect(locationAt(f.pos), id).toBe(f.room);
+      expect(nearestNode(f.pos), id).toBeDefined();
+    }
+  });
+});

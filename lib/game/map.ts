@@ -203,6 +203,13 @@ export const CAMERA_MOUNTS: Record<string, Point> = {
   medbay: { x: 906, y: 914 },
 };
 
+/** Where the crew fix sabotage: the breaker panel and the two pressure valves. */
+export const FIX_STATIONS = {
+  breaker: { label: "Breaker panel", room: "reactor" as RoomId, pos: { x: 1604, y: 562 } },
+  valveDock: { label: "Dock pressure valve", room: "dock" as RoomId, pos: { x: 412, y: 600 } },
+  valveHydro: { label: "Hydro pressure valve", room: "hydro" as RoomId, pos: { x: 1458, y: 992 } },
+};
+
 /** Stand here, at the monitor desk in Comms, to watch the feeds. */
 export const CAMERA_DESK: Point = { x: 631, y: 284 };
 

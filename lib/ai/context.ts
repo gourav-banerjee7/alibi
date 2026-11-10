@@ -29,6 +29,10 @@ export function situation(state: GameState, meeting?: MeetingRecord): string {
   if (dead.length > 0) parts.push(`Already dead: ${dead.join(", ")}.`);
   const ejected = state.characters.filter((c) => c.ejected).map((c) => c.name);
   if (ejected.length > 0) parts.push(`Locked in the dive chamber after earlier votes: ${ejected.join(", ")}.`);
+  for (const r of state.sabotageLog.filter((r) => r.from >= state.roundStart)) {
+    const end = r.to === null ? "" : r.kind === "blackout" ? ` (power back at ${clock(r.to)})` : ` (sealed at ${clock(r.to)})`;
+    parts.push(r.kind === "blackout" ? `The power failed at ${clock(r.from)}${end}.` : `A hull breach alarm went off at ${clock(r.from)}${end}.`);
+  }
   parts.push(`This is meeting ${state.meetings.length + 1} of 3; the storm clears after the third.`);
   return parts.join(" ");
 }
@@ -41,6 +45,9 @@ export function secretsOf(state: GameState, id: string): string[] {
     out.push(
       `On the security cameras at ${clock(k.t)} you watched ${byId(state, k.killer).name} kill ${byId(state, k.victim).name} in ${locationName(k.loc)}. You are certain. Tell the meeting.`,
     );
+  }
+  for (const r of state.sabotageLog.filter((r) => r.by === id && r.from >= state.roundStart)) {
+    out.push(`You caused the ${r.kind === "blackout" ? "blackout" : "hull breach"} at ${clock(r.from)}. Never admit it.`);
   }
   for (const k of state.kills.filter((k) => k.killer === id)) {
     out.push(`You killed ${byId(state, k.victim).name} in ${locationName(k.loc)} at ${clock(k.t)}.`);

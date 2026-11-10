@@ -37,7 +37,7 @@ export interface Character extends Persona {
   /** AI killer: id it is hunting. */
   huntTarget?: string;
   /** AI: heading to the camera desk to watch the feeds. */
-  errand?: "cams";
+  errand?: "cams" | `fix:${string}`;
 }
 
 /** Ground truth: where someone was, from..to (game minutes). to=null while ongoing. */
@@ -113,6 +113,35 @@ export interface MeetingRecord {
   ejected?: string;
 }
 
+export type SabotageKind = "blackout" | "breach";
+
+export interface FixPoint {
+  id: string;
+  label: string;
+  room: RoomId;
+  pos: Point;
+  /** 0..1; held Use (or an AI crew member standing there) fills it. */
+  progress: number;
+  done: boolean;
+}
+
+export interface Sabotage {
+  kind: SabotageKind;
+  by: string;
+  from: number;
+  /** A breach must be fixed before this game minute or the hull gives way. */
+  deadline?: number;
+  fixes: FixPoint[];
+}
+
+/** Past sabotages, for memory: cameras show nothing during a blackout. */
+export interface SabotageRecord {
+  kind: SabotageKind;
+  by: string;
+  from: number;
+  to: number | null;
+}
+
 /** Someone sitting at the camera desk, from..to. */
 export interface CamSession {
   who: string;
@@ -149,6 +178,10 @@ export interface GameState {
   clues: string[];
   emergencyUsed: boolean;
   camSessions: CamSession[];
+  sabotage?: Sabotage;
+  sabotageLog: SabotageRecord[];
+  /** The killer can't sabotage again before this game minute. */
+  sabotageReadyAt: number;
   /** Set when the sim wants the UI to open something. */
   pending?: { kind: "meeting"; calledBy: string; reason: "body" | "emergency"; body?: Body } | { kind: "pact"; from: string; to: string };
   winner?: Side;

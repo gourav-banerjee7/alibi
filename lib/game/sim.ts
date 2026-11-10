@@ -1,9 +1,9 @@
 import { clock } from "./clock";
-import { CAMERA_DESK, CAMERA_ROOMS, findPath, isRoom, locationAt, locationName, ROOMS, spotInRoom, walkable } from "./map";
+import { CAMERA_DESK, CAMERA_ROOMS, FIX_STATIONS, findPath, isRoom, locationAt, locationName, ROOMS, spotInRoom, walkable } from "./map";
 import { next, pick } from "./rng";
 import { alliesOfKiller, aliveChars, byId, checkWin, currentKiller, player, sideOf } from "./rules";
 import { KILL_COOLDOWN, seatInMess } from "./setup";
-import type { Body, Character, GameState, LocationId, Point, RoomId } from "./types";
+import type { Body, Character, FixPoint, GameState, LocationId, Point, RoomId, SabotageKind } from "./types";
 
 export const STEP = 0.05; // fixed sim step in real seconds (= game minutes)
 const PLAYER_SPEED = 150;
@@ -12,6 +12,13 @@ const KILL_RANGE = 62;
 const USE_RANGE = 44;
 const TALK_RANGE = 240;
 const TASK_SECONDS = 2.5;
+export const BREACH_SECONDS = 45;
+const FIX_SECONDS = 2;
+const SABOTAGE_COOLDOWN = 35;
+/** How long the AI crew take to react before heading to a fix station. */
+const RESPONSE_DELAY: Record<SabotageKind, number> = { blackout: 7, breach: 3 };
+/** In a blackout you only make out people this close. */
+export const DARK_SIGHT = 220;
 
 export interface Input {
   /** Keyboard direction, already normalised, or null. */
@@ -85,6 +92,98 @@ export function camerasInUse(state: GameState, except?: string) {
   return state.camSessions.some((s) => s.to === null && s.who !== except);
 }
 
+export const blackout = (state: GameState) => state.sabotage?.kind === "blackout";
+
+/** Feeds are watched and actually showing something (a blackout kills the cameras). */
+export const camerasLive = (state: GameState, except?: string) => camerasInUse(state, except) && !blackout(state);
+
+// ---- Sabotage --------------------------------------------------------------------------------
+
+export function canSabotage(state: GameState, by: string) {
+  const c = byId(state, by);
+  return c.alive && c.role === "killer" && state.phase === "roam" && !state.sabotage && state.t >= state.sabotageReadyAt;
+}
+
+export function startSabotage(state: GameState, kind: SabotageKind, by: string): boolean {
+  if (!canSabotage(state, by)) return false;
+  const stations =
+    kind === "blackout"
+      ? [["breaker", FIX_STATIONS.breaker] as const]
+      : [["valveDock", FIX_STATIONS.valveDock] as const, ["valveHydro", FIX_STATIONS.valveHydro] as const];
+  const fixes: FixPoint[] = stations.map(([id, f]) => ({ id, label: f.label, room: f.room, pos: { ...f.pos }, progress: 0, done: false }));
+  state.sabotage = { kind, by, from: state.t, deadline: kind === "breach" ? state.t + BREACH_SECONDS : undefined, fixes };
+  state.sabotageLog.push({ kind, by, from: state.t, to: null });
+  state.log.push(`${clock(state.t)} ${byId(state, by).name} triggered a ${kind === "blackout" ? "blackout" : "hull breach"}.`);
+  return true;
+}
+
+function endSabotage(state: GameState, how: "fixed" | "meeting" | "failed") {
+  const sab = state.sabotage;
+  if (!sab) return;
+  for (const r of state.sabotageLog) if (r.to === null) r.to = state.t;
+  state.sabotage = undefined;
+  state.sabotageReadyAt = state.t + SABOTAGE_COOLDOWN;
+  for (const c of state.characters) {
+    if (c.errand?.startsWith("fix:")) {
+      c.errand = undefined;
+      c.path = [];
+    }
+  }
+  if (how === "fixed") state.log.push(`${clock(state.t)} ${sab.kind === "blackout" ? "Power restored." : "Breach sealed."}`);
+}
+
+export function nearbyFix(state: GameState): FixPoint | undefined {
+  const you = player(state);
+  return state.sabotage?.fixes.find((f) => !f.done && dist(f.pos, you.pos) <= USE_RANGE);
+}
+
+function sabotageStep(state: GameState, useHeld: boolean, dt: number) {
+  const sab = state.sabotage;
+  if (!sab) return;
+  const you = player(state);
+  const mine = you.alive && useHeld ? nearbyFix(state) : undefined;
+  if (mine) mine.progress += dt / FIX_SECONDS;
+
+  // After a beat, the nearest free innocent heads to each unfixed station.
+  if (state.t - sab.from >= RESPONSE_DELAY[sab.kind]) {
+    for (const f of sab.fixes.filter((f) => !f.done)) {
+      const job = `fix:${f.id}` as const;
+      if (state.characters.some((c) => c.alive && c.errand === job)) continue;
+      const free = state.characters
+        .filter((c) => c.alive && !c.isPlayer && c.role === "crew" && !c.errand?.startsWith("fix:"))
+        .sort((a, b) => dist(a.pos, f.pos) - dist(b.pos, f.pos))[0];
+      if (free) {
+        closeSession(state, free.id);
+        free.errand = job;
+        free.busyUntil = 0;
+        free.huntTarget = undefined;
+        walkTo(free, f.pos);
+      }
+    }
+  }
+  for (const c of state.characters) {
+    if (!c.alive || !c.errand?.startsWith("fix:")) continue;
+    const f = sab.fixes.find((x) => `fix:${x.id}` === c.errand);
+    if (f && !f.done && c.path.length === 0 && dist(c.pos, f.pos) <= USE_RANGE) f.progress += dt / FIX_SECONDS;
+  }
+  for (const f of sab.fixes) {
+    if (!f.done && f.progress >= 1) {
+      f.progress = 1;
+      f.done = true;
+    }
+  }
+
+  if (sab.fixes.every((f) => f.done)) {
+    endSabotage(state, "fixed");
+  } else if (sab.deadline !== undefined && state.t >= sab.deadline) {
+    endSabotage(state, "failed");
+    state.log.push(`${clock(state.t)} The hull gave way.`);
+    state.winner = "killer";
+    state.endReason = "The hull breach wasn't sealed in time. The sea came in.";
+    state.phase = "over";
+  }
+}
+
 function openSession(state: GameState, who: string) {
   if (!isWatching(state, who)) state.camSessions.push({ who, from: state.t, to: null });
 }
@@ -134,8 +233,8 @@ function loneTarget(state: GameState, killer: Character): Character | undefined 
   const candidates = aliveChars(state).filter((c) => {
     if (c.id === killer.id || allies.has(c.id)) return false;
     if (c.isPlayer && !refused) return false; // the player is only hunted after turning down a pact
-    if (onCamera(c.loc) && camerasInUse(state, killer.id)) return false; // someone is watching that room
-    const company = othersInLoc(state, c).filter((o) => o.id !== killer.id);
+    if (onCamera(c.loc) && camerasLive(state, killer.id)) return false; // someone is watching that room
+    const company = othersInLoc(state, c).filter((o) => o.id !== killer.id && (!blackout(state) || dist(o.pos, c.pos) < DARK_SIGHT));
     return company.length === 0;
   });
   if (candidates.length === 0) return undefined;
@@ -145,7 +244,10 @@ function loneTarget(state: GameState, killer: Character): Character | undefined 
 
 function witnessesFor(state: GameState, killer: Character, victim: Character): Character[] {
   const allies = alliesOfKiller(state);
-  return othersInLoc(state, killer).filter((o) => o.id !== victim.id && !allies.has(o.id));
+  // In a blackout, only someone close enough to make it out counts as a witness.
+  return othersInLoc(state, killer).filter(
+    (o) => o.id !== victim.id && !allies.has(o.id) && (!blackout(state) || dist(o.pos, victim.pos) < DARK_SIGHT),
+  );
 }
 
 export function kill(state: GameState, killer: Character, victim: Character) {
@@ -164,6 +266,8 @@ export function kill(state: GameState, killer: Character, victim: Character) {
 }
 
 function aiKiller(state: GameState, c: Character): boolean {
+  // Every so often, cause trouble: mostly blackouts for cover, sometimes a breach to split the crew.
+  if (canSabotage(state, c.id) && next(state) < STEP / 22) startSabotage(state, next(state) < 0.7 ? "blackout" : "breach", c.id);
   const ready = state.t >= c.killCooldownUntil;
   // If no one has died for a long time, stop waiting for the perfect moment.
   const restless = state.t - state.roundStart > 90;
@@ -189,7 +293,7 @@ function aiKiller(state: GameState, c: Character): boolean {
   }
 
   const target = c.huntTarget ? state.characters.find((x) => x.id === c.huntTarget && x.alive) : undefined;
-  const filmed = target && onCamera(target.loc) && camerasInUse(state, c.id);
+  const filmed = target && onCamera(target.loc) && camerasLive(state, c.id);
   if (target && !filmed && target.loc === c.loc && witnessesFor(state, c, target).length === 0 && dist(c.pos, target.pos) <= KILL_RANGE) {
     kill(state, c, target);
     return true;
@@ -213,6 +317,13 @@ function aiStep(state: GameState, c: Character, dt: number) {
   if (c.role === "killer" && aiKiller(state, c)) {
     followPath(c, AI_SPEED * 1.1, dt);
     return;
+  }
+  if (c.errand?.startsWith("fix:")) {
+    if (state.sabotage) {
+      followPath(c, AI_SPEED * 1.2, dt);
+      return;
+    }
+    c.errand = undefined;
   }
   if (state.t < c.busyUntil) return;
   if (c.errand === "cams" && isWatching(state, c.id)) {
@@ -272,10 +383,12 @@ export function killBlockedReason(state: GameState): string | undefined {
   const you = player(state);
   if (you.role !== "killer") return undefined;
   if (state.t < you.killCooldownUntil) return `Ready in ${Math.ceil(you.killCooldownUntil - state.t)}s`;
-  const near = othersInLoc(state, you).filter((o) => o.role !== "accomplice");
+  const near = othersInLoc(state, you)
+    .filter((o) => o.role !== "accomplice")
+    .sort((a, b) => dist(a.pos, you.pos) - dist(b.pos, you.pos));
   if (near.length === 0) return "No one here";
-  if (near.length > 1) return "Too many eyes";
   if (dist(near[0]!.pos, you.pos) > KILL_RANGE + 10) return "Get closer";
+  if (witnessesFor(state, you, near[0]!).length > 0) return blackout(state) ? "Someone's close" : "Too many eyes";
   return undefined;
 }
 
@@ -296,7 +409,7 @@ export function nearbyTask(state: GameState) {
 
 export function canCallEmergency(state: GameState) {
   const you = player(state);
-  return !state.emergencyUsed && you.alive && you.loc === "mess";
+  return !state.emergencyUsed && you.alive && you.loc === "mess" && !state.sabotage;
 }
 
 export function callMeeting(state: GameState, calledBy: string, reason: "body" | "emergency", body?: Body) {
@@ -305,6 +418,7 @@ export function callMeeting(state: GameState, calledBy: string, reason: "body" |
     body.foundAt = state.t;
   }
   if (reason === "emergency") state.emergencyUsed = true;
+  endSabotage(state, "meeting");
   for (const c of state.characters) {
     c.path = [];
     c.errand = undefined;
@@ -348,7 +462,9 @@ export function tick(state: GameState, input: Input, dt = STEP) {
     } else if (you.path.length > 0) {
       followPath(you, PLAYER_SPEED, dt);
     }
-    const task = nearbyTask(state);
+    sabotageStep(state, input.use, dt);
+    if (state.phase !== "roam") return;
+    const task = nearbyFix(state) ? undefined : nearbyTask(state);
     if (task && input.use && you.role !== "killer") {
       task.progress = Math.min(1, task.progress + dt / TASK_SECONDS);
       if (task.progress >= 1) {
@@ -389,6 +505,7 @@ export function startNextRound(state: GameState) {
     c.huntTarget = undefined;
     c.errand = undefined;
     state.segments.push({ who: c.id, loc: "mess", from: state.t, to: null });
+    state.sabotageReadyAt = state.t + 20;
   });
 }
 

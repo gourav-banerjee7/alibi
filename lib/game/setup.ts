@@ -38,6 +38,8 @@ export function newGame(seed: number, startRole: StartRole = "crew"): GameState 
     clues: [],
     emergencyUsed: false,
     camSessions: [],
+    sabotageLog: [],
+    sabotageReadyAt: 20,
     log: [],
   };
 

@@ -54,12 +54,33 @@ function mergeShortHops(items: Recollection[]): Recollection[] {
 }
 
 /** What `who` saw on the camera feeds between from..to: one recollection per camera room per sitting. */
+/** Stretches of time when the cameras were dark because of a blackout. */
+function darkWindows(state: GameState): Array<[number, number]> {
+  return state.sabotageLog.filter((r) => r.kind === "blackout").map((r) => [r.from, r.to ?? state.t]);
+}
+
+/** [a,b] with the blackout windows cut out. */
+function litPieces(state: GameState, a: number, b: number): Array<[number, number]> {
+  let pieces: Array<[number, number]> = [[a, b]];
+  for (const [da, db] of darkWindows(state)) {
+    pieces = pieces.flatMap(([x, y]): Array<[number, number]> => {
+      if (db <= x || da >= y) return [[x, y]];
+      const out: Array<[number, number]> = [];
+      if (da > x) out.push([x, da]);
+      if (db < y) out.push([db, y]);
+      return out;
+    });
+  }
+  return pieces;
+}
+
 export function cameraRecollections(state: GameState, who: string, from: number, to: number): Recollection[] {
   const out: Recollection[] = [];
   for (const sess of state.camSessions) {
     if (sess.who !== who) continue;
-    const a = Math.max(sess.from, from);
-    const b = Math.min(sess.to ?? state.t, to);
+    const a0 = Math.max(sess.from, from);
+    const b0 = Math.min(sess.to ?? state.t, to);
+    for (const [a, b] of litPieces(state, a0, b0)) {
     if (b - a < 0.3) continue;
     for (const room of CAMERA_ROOMS) {
       const saw = new Set<string>();
@@ -69,6 +90,7 @@ export function cameraRecollections(state: GameState, who: string, from: number,
         if (ow && ow.b - ow.a >= MIN_SIGHTING) saw.add(o.who);
       }
       out.push({ loc: room, from: a, to: b, saw: [...saw], camera: true });
+    }
     }
   }
   return out;
@@ -85,6 +107,7 @@ export function killsSeenOnCamera(state: GameState, who: string) {
     (k) =>
       k.killer !== who &&
       CAMERA_ROOMS.includes(k.loc as (typeof CAMERA_ROOMS)[number]) &&
+      !darkWindows(state).some(([a, b]) => k.t >= a && k.t <= b) &&
       state.camSessions.some((s) => s.who === who && s.from <= k.t && (s.to ?? state.t) >= k.t),
   );
 }

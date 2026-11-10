@@ -23,6 +23,8 @@ and some only pretend so they can expose you at the next meeting.
 | Report a body | **R** |
 | Emergency meeting | **M** in the Mess Hall, once per game |
 | Security cameras | **C** at the Comms desk; Esc or any movement to leave |
+| Sabotage (killer) | **B** blackout · **V** hull breach |
+| Fix sabotage | hold **E** at the breaker panel or a pressure valve |
 | Kill (killer) | **K** when you're alone with someone |
 | Offer a deal (killer) | **Q** when you're alone with someone |
 
@@ -33,6 +35,13 @@ and some only pretend so they can expose you at the next meeting.
   Reactor and Medbay. While anyone watches, every camera's red light is on, so the killer knows to avoid those
   rooms. The crew use the desk too: a murder caught on camera gets named at the meeting, and anyone who watched
   a room can disprove a false alibi about it.
+- **Sabotage:** the killer can cut the power or crack the hull.
+  - *Blackout:* the crew see only as far as their helmet lamps, the cameras show static, and the killer, who has
+    night vision, can strike in a dark room unseen. Restore power at the breaker panel in the Reactor.
+  - *Hull breach:* a 45-second countdown. Close the pressure valves in the Sub Dock **and** Hydroponics, or the
+    sea comes in and the killer wins.
+  - The AI crew run to fix both, the AI killer uses them for cover, and everyone at the next meeting knows when
+    the lights went out. Only the killer knows who did it.
 - You only see people in the same room or tube as you.
 - Each finished task pulls one **true** sonar log ("Kenji was in Reactor 02:31–02:40").
 - The storm clears after three meetings. If the killer is still aboard, the killer's side wins.
@@ -79,7 +88,7 @@ npm run dev
 ```
 
 ```bash
-npm test          # 38 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
+npm test          # 47 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
 npm run typecheck
 npm run lint
 npm run build

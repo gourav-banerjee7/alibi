@@ -1,8 +1,8 @@
 import { diverDataUrl } from "@/lib/art/diver";
 import { drawConsole, drawFloor, drawProp, hexA } from "@/lib/art/props";
-import { CAMERA_DESK, CAMERA_MOUNTS, CAMERA_ROOMS, CORRIDORS, ROOM_BY_ID, ROOMS, WORLD, type Rect } from "@/lib/game/map";
+import { CAMERA_DESK, CAMERA_MOUNTS, CAMERA_ROOMS, CORRIDORS, FIX_STATIONS, ROOM_BY_ID, ROOMS, WORLD, type Rect } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
-import { camerasInUse, killTarget, nearbyTask, pactCandidate } from "@/lib/game/sim";
+import { blackout, camerasInUse, DARK_SIGHT, killTarget, nearbyTask, pactCandidate } from "@/lib/game/sim";
 import { clock } from "@/lib/game/clock";
 import type { Character, GameState, LocationId, Point, RoomId } from "@/lib/game/types";
 
@@ -136,6 +136,65 @@ function drawBody(ctx: CanvasRenderingContext2D, c: Character, pos: Point, time:
   ctx.stroke();
 }
 
+// ---- Sabotage stations --------------------------------------------------------------------
+
+/** The breaker panel and the pressure valves, always visible; alarmed while a sabotage needs them. */
+function drawFixStation(ctx: CanvasRenderingContext2D, id: string, pos: Point, state: GameState, time: number) {
+  const fix = state.sabotage?.fixes.find((f) => f.id === id);
+  const alarm = fix && !fix.done;
+  const pulse = (Math.sin(time * 6) + 1) / 2;
+  ctx.save();
+  if (id === "breaker") {
+    const x = pos.x - 22;
+    const y = pos.y - 52;
+    ctx.beginPath();
+    ctx.roundRect(x, y, 44, 30, 4);
+    ctx.fillStyle = "#2a3150";
+    ctx.fill();
+    ctx.strokeStyle = "#05070d";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const up = fix ? fix.progress * 4 > i : true;
+      ctx.fillStyle = up ? "#5be49b" : "#ff5d73";
+      ctx.fillRect(x + 6 + i * 9, y + (up ? 6 : 14), 5, 10);
+    }
+  } else {
+    // a pressure valve wheel on a pipe stub
+    ctx.fillStyle = "#4a5878";
+    ctx.fillRect(pos.x - 5, pos.y - 54, 10, 22);
+    ctx.translate(pos.x, pos.y - 44);
+    ctx.rotate((fix?.progress ?? 1) * Math.PI * 3);
+    ctx.strokeStyle = alarm ? "#ff5d73" : "#c9a86a";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      ctx.rotate((Math.PI * 2) / 3);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -13);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  if (alarm) {
+    ctx.beginPath();
+    ctx.ellipse(pos.x, pos.y + 6, 26 + pulse * 5, 11 + pulse * 2, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = hexA(PAL.coral, 0.5 + pulse * 0.45);
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    if (fix.progress > 0) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y - 74, 10, -Math.PI / 2, -Math.PI / 2 + fix.progress * Math.PI * 2);
+      ctx.strokeStyle = PAL.kelp;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+    }
+  }
+}
+
 // ---- Cameras -------------------------------------------------------------------------------
 
 /** A wall-mounted camera. Its light glows red while anyone is watching the feeds. */
@@ -198,6 +257,24 @@ function drawCameraMount(ctx: CanvasRenderingContext2D, p: Point, room: RoomId, 
  */
 export function drawCameraFeed(ctx: CanvasRenderingContext2D, state: GameState, room: RoomId, index: number, w: number, h: number, time: number) {
   const def = ROOM_BY_ID[room];
+  if (blackout(state)) {
+    ctx.fillStyle = "#05070d";
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      const v = ((i * 7919 + Math.floor(time * 30) * 104729) % 997) / 997;
+      ctx.fillStyle = `rgba(200,210,230,${v * 0.18})`;
+      ctx.fillRect(((i * 37) % 97) / 97 * w, ((i * 61 + Math.floor(time * 30) * 13) % 89) / 89 * h, 2, 2);
+    }
+    ctx.font = "700 14px ui-monospace, SFMono-Regular, monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(255,93,115,0.9)";
+    ctx.fillText("NO SIGNAL · POWER FAILURE", w / 2, h / 2);
+    ctx.font = "600 12px ui-monospace, SFMono-Regular, monospace";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(233,236,245,0.6)";
+    ctx.fillText(`CAM ${index + 1} · ${def.name.toUpperCase()}`, 12, 22);
+    return;
+  }
   const r = def.rect;
   const pad = 26;
   const scale = Math.min(w / (r.w + pad * 2), h / (r.h + pad * 2));
@@ -333,6 +410,14 @@ function drawMinimap(ctx: CanvasRenderingContext2D, state: GameState, cam: Point
     ctx.fillStyle = PAL.ember;
     ctx.fill();
   }
+  // stations that need fixing
+  for (const f of state.sabotage?.fixes ?? []) {
+    if (f.done) continue;
+    ctx.beginPath();
+    ctx.arc(ox + f.pos.x * scale, oy + f.pos.y * scale, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = Math.sin(performance.now() / 150) > 0 ? PAL.coral : "#5a1a24";
+    ctx.fill();
+  }
   // camera frame and you
   ctx.strokeStyle = "rgba(233,236,245,0.35)";
   ctx.strokeRect(ox + cam.x * scale, oy + cam.y * scale, VIEW.w * scale, VIEW.h * scale);
@@ -452,7 +537,8 @@ export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, tim
     }
     for (const c of room.consoles) items.push({ y: c.y - 16, draw: () => drawConsole(ctx, c.x, c.y, room.tint, time) });
   }
-  const live = camerasInUse(state);
+  for (const [id, f] of Object.entries(FIX_STATIONS)) items.push({ y: f.pos.y - 30, draw: () => drawFixStation(ctx, id, f.pos, state, time) });
+  const live = camerasInUse(state) && !blackout(state);
   for (const room of CAMERA_ROOMS) {
     const p = CAMERA_MOUNTS[room]!;
     items.push({ y: p.y - 40, draw: () => drawCameraMount(ctx, p, room, live, time) });
@@ -476,6 +562,21 @@ export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, tim
   for (const c of CORRIDORS) if (c.id !== you.loc) for (const r of c.rects) ctx.fillRect(r.x, r.y, r.w, r.h);
 
   drawLabels(ctx, you.loc);
+
+  // Blackout: the crew see only what their helmet lamp reaches. The killer has night vision.
+  if (blackout(state)) {
+    const seesInDark = you.role === "killer";
+    if (seesInDark) {
+      ctx.fillStyle = "rgba(120,0,30,0.16)";
+      ctx.fillRect(cam.x, cam.y, VIEW.w, VIEW.h);
+    } else {
+      const dark = ctx.createRadialGradient(you.pos.x, you.pos.y, DARK_SIGHT * 0.35, you.pos.x, you.pos.y, DARK_SIGHT);
+      dark.addColorStop(0, "rgba(0,0,0,0)");
+      dark.addColorStop(1, "rgba(1,2,5,0.95)");
+      ctx.fillStyle = dark;
+      ctx.fillRect(cam.x, cam.y, VIEW.w, VIEW.h);
+    }
+  }
 
   // your helmet lamp
   if (you.alive) {
@@ -511,5 +612,13 @@ export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, tim
   v.addColorStop(1, "rgba(0,0,0,0.45)");
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, VIEW.w, VIEW.h);
+  if (state.sabotage?.kind === "breach") {
+    const pulse = (Math.sin(time * 5) + 1) / 2;
+    const alarm = ctx.createRadialGradient(VIEW.w / 2, VIEW.h / 2, VIEW.h * 0.35, VIEW.w / 2, VIEW.h / 2, VIEW.w * 0.6);
+    alarm.addColorStop(0, "rgba(255,40,60,0)");
+    alarm.addColorStop(1, `rgba(255,40,60,${0.18 + pulse * 0.22})`);
+    ctx.fillStyle = alarm;
+    ctx.fillRect(0, 0, VIEW.w, VIEW.h);
+  }
   drawMinimap(ctx, state, cam);
 }
