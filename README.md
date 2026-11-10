@@ -12,7 +12,7 @@ side, or **take the knife** and swap roles. Refuse, and you know who did it, but
 the others? Play as the killer and you can make the same offer. Some divers accept, some refuse,
 and some only pretend so they can expose you at the next meeting.
 
-> Live demo: _add your Vercel link here_
+**▶ Play it: [alibi-delta-lac.vercel.app](https://alibi-delta-lac.vercel.app)**
 
 ## How to play
 
