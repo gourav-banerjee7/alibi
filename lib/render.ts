@@ -1,126 +1,163 @@
+import { diverDataUrl } from "@/lib/art/diver";
 import { CORRIDORS, ROOMS, WORLD, type Rect } from "@/lib/game/map";
 import { player } from "@/lib/game/rules";
 import { killTarget, nearbyTask, pactCandidate } from "@/lib/game/sim";
 import type { Character, GameState, LocationId, Point } from "@/lib/game/types";
 
-const facing = new Map<string, { last: Point; dir: Point }>();
+const PAL = {
+  waterTop: "#070a14",
+  waterBottom: "#03050a",
+  floor: "#0f1426",
+  floorLit: "#141b33",
+  corridor: "#0a0e1c",
+  corridorEdge: "#1d2540",
+  fog: "rgba(3,5,10,0.62)",
+  glow: "#5ce1e6",
+  ember: "#ffb547",
+  coral: "#ff5d73",
+  orchid: "#b48cff",
+  kelp: "#5be49b",
+  ink: "#e9ecf5",
+};
 
-function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number) {
-  ctx.beginPath();
-  ctx.roundRect(r.x, r.y, r.w, r.h, radius);
+const hexA = (hex: string, a: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+// ---- Sprites ------------------------------------------------------------------------------
+
+const sprites = new Map<string, HTMLImageElement>();
+
+function sprite(id: string, dead = false): HTMLImageElement | undefined {
+  if (typeof Image === "undefined") return undefined;
+  const key = `${id}:${dead}`;
+  let img = sprites.get(key);
+  if (!img) {
+    img = new Image();
+    img.src = diverDataUrl(id, { uid: `cv${id}${dead ? "d" : ""}`, dead });
+    sprites.set(key, img);
+  }
+  return img.complete && img.naturalWidth > 0 ? img : undefined;
 }
 
-function updateFacing(c: Character): Point {
-  const f = facing.get(c.id);
+const facing = new Map<string, { last: Point; dir: Point; step: number }>();
+
+function motion(c: Character) {
+  let f = facing.get(c.id);
   if (!f) {
-    facing.set(c.id, { last: { ...c.pos }, dir: { x: 0, y: 1 } });
-    return { x: 0, y: 1 };
+    f = { last: { ...c.pos }, dir: { x: 1, y: 0 }, step: 0 };
+    facing.set(c.id, f);
   }
   const dx = c.pos.x - f.last.x;
   const dy = c.pos.y - f.last.y;
-  const len = Math.hypot(dx, dy);
-  if (len > 0.3) f.dir = { x: dx / len, y: dy / len };
+  const moved = Math.hypot(dx, dy);
+  if (moved > 0.3) {
+    f.dir = { x: dx / moved, y: dy / moved };
+    f.step += moved;
+  }
   f.last = { ...c.pos };
-  return f.dir;
+  return { dir: f.dir, moving: moved > 0.3, step: f.step };
 }
 
-/** An original diver: round suit, big glass helmet, a tank on the back and a head lamp. */
-function drawDiver(ctx: CanvasRenderingContext2D, c: Character, dir: Point, time: number, highlight?: string) {
+const SPRITE = 48; // world units
+
+function drawDiver(ctx: CanvasRenderingContext2D, c: Character, time: number, ring?: string) {
+  const { dir, moving, step } = motion(c);
   const { x, y } = c.pos;
-  const bob = Math.sin(time * 3 + x * 0.05) * 0.8;
+  const bob = moving ? Math.abs(Math.sin(step * 0.18)) * -2.2 : Math.sin(time * 2.2 + x * 0.05) * 0.8;
 
-  if (highlight) {
+  if (ring) {
     ctx.beginPath();
-    ctx.arc(x, y + bob, 19, 0, Math.PI * 2);
-    ctx.strokeStyle = highlight;
+    ctx.ellipse(x, y + 12, 17, 6.5, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = ring;
     ctx.lineWidth = 2;
-    ctx.setLineDash([4, 3]);
+    ctx.shadowColor = ring;
+    ctx.shadowBlur = 10;
     ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
   }
-
-  // shadow
-  ctx.beginPath();
-  ctx.ellipse(x, y + 12, 10, 3.5, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.fill();
-
-  // air tank, behind the diver
-  ctx.save();
-  ctx.translate(x - dir.x * 8, y + bob - dir.y * 8);
-  ctx.fillStyle = "#475569";
-  ctx.beginPath();
-  ctx.roundRect(-4, -7, 8, 14, 3);
-  ctx.fill();
-  ctx.restore();
-
-  // suit
-  ctx.beginPath();
-  ctx.arc(x, y + bob, 11, 0, Math.PI * 2);
-  ctx.fillStyle = c.color;
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "rgba(0,0,0,0.45)";
-  ctx.stroke();
-
-  // helmet glass, facing the walking direction
-  const hx = x + dir.x * 4;
-  const hy = y + bob + dir.y * 4 - 2;
-  ctx.beginPath();
-  ctx.arc(hx, hy, 6.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#0b2236";
-  ctx.fill();
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(hx - 2, hy - 2, 1.8, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.75)";
-  ctx.fill();
-
-  // head lamp glow
-  ctx.beginPath();
-  ctx.arc(x, y + bob - 10, 2, 0, Math.PI * 2);
-  ctx.fillStyle = "#fde68a";
-  ctx.fill();
-
   if (c.isPlayer) {
     ctx.beginPath();
-    ctx.arc(x, y + bob, 14, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 1.5;
+    ctx.ellipse(x, y + 12, 15, 5.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = hexA(PAL.glow, 0.18);
+    ctx.fill();
+    ctx.strokeStyle = hexA(PAL.glow, 0.7);
+    ctx.lineWidth = 1.2;
     ctx.stroke();
   }
 
-  ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
+  const img = sprite(c.id);
+  ctx.save();
+  ctx.translate(x, y + bob - 10);
+  if (dir.x < -0.15) ctx.scale(-1, 1);
+  if (img) ctx.drawImage(img, -SPRITE / 2, -SPRITE / 2, SPRITE, SPRITE);
+  else {
+    ctx.beginPath();
+    ctx.arc(0, 0, 11, 0, Math.PI * 2);
+    ctx.fillStyle = c.color;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // name pill
+  const label = c.isPlayer ? "You" : c.name;
+  ctx.font = "600 9.5px ui-sans-serif, system-ui, sans-serif";
+  const w = ctx.measureText(label).width + 10;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y + 19, w, 13, 6.5);
+  ctx.fillStyle = "rgba(5,7,13,0.78)";
+  ctx.fill();
+  ctx.strokeStyle = hexA(c.color, 0.55);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = PAL.ink;
   ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(226,232,240,0.95)";
-  ctx.fillText(c.isPlayer ? "You" : c.name, x, y + bob + 26);
+  ctx.fillText(label, x, y + 28.5);
 }
 
-function drawBody(ctx: CanvasRenderingContext2D, c: Character, pos: Point) {
+function drawBody(ctx: CanvasRenderingContext2D, c: Character, pos: Point, time: number) {
   ctx.beginPath();
-  ctx.ellipse(pos.x, pos.y + 4, 16, 7, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(127,29,29,0.55)";
+  ctx.ellipse(pos.x, pos.y + 6, 22, 8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(160,20,45,0.45)";
   ctx.fill();
+  const img = sprite(c.id, true);
+  if (img) ctx.drawImage(img, pos.x - SPRITE / 2, pos.y - SPRITE / 2 - 4, SPRITE, SPRITE);
+  // a pulsing alarm ring so a body is hard to miss
+  const pulse = (Math.sin(time * 4) + 1) / 2;
   ctx.beginPath();
-  ctx.ellipse(pos.x, pos.y, 12, 7, 0.3, 0, Math.PI * 2);
-  ctx.fillStyle = c.color;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(pos.x + 8, pos.y - 3, 5, 0, Math.PI * 2);
-  ctx.fillStyle = "#0b2236";
-  ctx.fill();
-  ctx.strokeStyle = "#94a3b8";
-  ctx.lineWidth = 1;
+  ctx.arc(pos.x, pos.y, 24 + pulse * 6, 0, Math.PI * 2);
+  ctx.strokeStyle = hexA(PAL.ember, 0.25 + pulse * 0.35);
+  ctx.lineWidth = 2;
   ctx.stroke();
 }
 
-const bubbles = Array.from({ length: 40 }, (_, i) => ({
-  x: (i * 197) % WORLD.width,
-  speed: 8 + ((i * 37) % 13),
-  r: 1 + ((i * 7) % 3),
+function drawLabels(ctx: CanvasRenderingContext2D, youLoc: LocationId) {
+  for (const room of ROOMS) {
+    const lit = room.id === youLoc;
+    const { rect } = room;
+    ctx.font = "700 9.5px ui-sans-serif, system-ui, sans-serif";
+    const label = room.name.toUpperCase();
+    const lw = ctx.measureText(label).width + 14;
+    ctx.beginPath();
+    ctx.roundRect(rect.x + 8, rect.y + 8, lw, 16, 8);
+    ctx.fillStyle = hexA(room.tint, lit ? 0.2 : 0.1);
+    ctx.fill();
+    ctx.fillStyle = hexA(room.tint, lit ? 1 : 0.7);
+    ctx.textAlign = "left";
+    ctx.fillText(label, rect.x + 15, rect.y + 19.5);
+
+  }
+}
+
+// ---- Station ------------------------------------------------------------------------------
+
+const motes = Array.from({ length: 70 }, (_, i) => ({
+  x: (i * 157) % WORLD.width,
+  speed: 5 + ((i * 37) % 11),
+  r: 0.6 + ((i * 7) % 3) * 0.5,
   phase: (i * 53) % WORLD.height,
+  hue: i % 5 === 0 ? PAL.orchid : PAL.glow,
 }));
 
 function rectsOf(loc: LocationId): Rect[] {
@@ -132,129 +169,176 @@ function rectsOf(loc: LocationId): Rect[] {
 export function drawStation(ctx: CanvasRenderingContext2D, state: GameState, time: number) {
   const you = player(state);
 
-  // the deep
+  // the water
   const g = ctx.createLinearGradient(0, 0, 0, WORLD.height);
-  g.addColorStop(0, "#041021");
-  g.addColorStop(1, "#02070f");
+  g.addColorStop(0, PAL.waterTop);
+  g.addColorStop(1, PAL.waterBottom);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, WORLD.width, WORLD.height);
-  for (const b of bubbles) {
-    const y = WORLD.height - ((time * b.speed + b.phase) % (WORLD.height + 20));
+  for (const m of motes) {
+    const y = WORLD.height - ((time * m.speed + m.phase) % (WORLD.height + 20));
     ctx.beginPath();
-    ctx.arc(b.x + Math.sin(time + b.phase) * 4, y, b.r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(125,211,252,0.12)";
+    ctx.arc(m.x + Math.sin(time * 0.6 + m.phase) * 6, y, m.r, 0, Math.PI * 2);
+    ctx.fillStyle = hexA(m.hue, 0.16);
     ctx.fill();
   }
 
-  // corridors
+  // tubes
   for (const c of CORRIDORS) {
+    const lit = c.id === you.loc;
     for (const r of c.rects) {
-      ctx.fillStyle = "#0c1a2c";
+      ctx.fillStyle = lit ? "#10172b" : PAL.corridor;
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
   }
   for (const c of CORRIDORS) {
     for (const r of c.rects) {
-      ctx.strokeStyle = "#1c3352";
+      ctx.strokeStyle = PAL.corridorEdge;
       ctx.lineWidth = 1;
       ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      // guide lights along the tube
+      ctx.fillStyle = hexA(PAL.glow, 0.22);
+      const horizontal = r.w > r.h;
+      const len = horizontal ? r.w : r.h;
+      for (let d = 10; d < len - 4; d += 18) {
+        const px = horizontal ? r.x + d : r.x + r.w / 2;
+        const py = horizontal ? r.y + r.h / 2 : r.y + d;
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+      }
     }
   }
 
   // rooms
   for (const room of ROOMS) {
-    roundRect(ctx, room.rect, 12);
-    ctx.fillStyle = room.tint;
-    ctx.fill();
-    ctx.strokeStyle = "#2b4c74";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    // floor grating
+    const lit = room.id === you.loc;
+    const { rect } = room;
     ctx.save();
-    roundRect(ctx, room.rect, 12);
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 14);
+    ctx.fillStyle = lit ? PAL.floorLit : PAL.floor;
+    ctx.fill();
     ctx.clip();
-    ctx.strokeStyle = "rgba(255,255,255,0.035)";
+    // accent light pooled in the room
+    const pool = ctx.createRadialGradient(rect.x + rect.w / 2, rect.y + rect.h / 2, 4, rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w * 0.75);
+    pool.addColorStop(0, hexA(room.tint, lit ? 0.16 : 0.07));
+    pool.addColorStop(1, hexA(room.tint, 0));
+    ctx.fillStyle = pool;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    // floor plates
+    ctx.strokeStyle = "rgba(255,255,255,0.028)";
     ctx.lineWidth = 1;
-    for (let x = room.rect.x; x < room.rect.x + room.rect.w; x += 16) {
+    for (let x = rect.x + 20; x < rect.x + rect.w; x += 20) {
       ctx.beginPath();
-      ctx.moveTo(x, room.rect.y);
-      ctx.lineTo(x, room.rect.y + room.rect.h);
+      ctx.moveTo(x, rect.y);
+      ctx.lineTo(x, rect.y + rect.h);
+      ctx.stroke();
+    }
+    for (let y = rect.y + 20; y < rect.y + rect.h; y += 20) {
+      ctx.beginPath();
+      ctx.moveTo(rect.x, y);
+      ctx.lineTo(rect.x + rect.w, y);
       ctx.stroke();
     }
     ctx.restore();
 
-    ctx.font = "700 11px ui-sans-serif, system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(186,230,253,0.6)";
-    ctx.fillText(room.name.toUpperCase(), room.rect.x + 10, room.rect.y + 18);
+    // glowing wall
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 14);
+    ctx.strokeStyle = hexA(room.tint, lit ? 0.85 : 0.35);
+    ctx.lineWidth = lit ? 2 : 1.5;
+    if (lit) {
+      ctx.shadowColor = room.tint;
+      ctx.shadowBlur = 14;
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
+    // consoles
     for (const p of room.consoles) {
-      ctx.fillStyle = "#0f2740";
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(p.x - 7, p.y - 5, 14, 10, 2);
+      ctx.roundRect(p.x - 8, p.y - 6, 16, 12, 3);
+      ctx.fillStyle = "#0a0f1e";
       ctx.fill();
+      ctx.strokeStyle = hexA(room.tint, 0.6);
+      ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.fillStyle = hexA(room.tint, 0.5 + Math.sin(time * 2 + p.x) * 0.2);
+      ctx.fillRect(p.x - 4, p.y - 2, 8, 3);
     }
   }
 
   // mess table
   ctx.beginPath();
-  ctx.ellipse(500, 320, 34, 20, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "#3b4466";
+  ctx.ellipse(500, 320, 36, 21, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#2a3150";
   ctx.fill();
+  ctx.strokeStyle = hexA(PAL.ember, 0.5);
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
 
-  // the player's tasks
+  // your tasks
   for (const t of state.tasks) {
+    const pulse = (Math.sin(time * 3.2) + 1) / 2;
     ctx.beginPath();
-    ctx.arc(t.pos.x, t.pos.y, 12, 0, Math.PI * 2);
-    ctx.strokeStyle = t.done ? "rgba(52,211,153,0.7)" : `rgba(250,204,21,${0.55 + Math.sin(time * 4) * 0.3})`;
+    ctx.arc(t.pos.x, t.pos.y, 13 + (t.done ? 0 : pulse * 2), 0, Math.PI * 2);
+    ctx.strokeStyle = t.done ? hexA(PAL.kelp, 0.55) : hexA(PAL.ember, 0.55 + pulse * 0.4);
     ctx.lineWidth = 2;
+    ctx.setLineDash(t.done ? [] : [5, 4]);
     ctx.stroke();
+    ctx.setLineDash([]);
   }
 
-  // bodies in your location
+  // bodies where you are
   for (const b of state.bodies) {
     if (b.foundAt !== undefined || b.loc !== you.loc) continue;
     const victim = state.characters.find((c) => c.id === b.victim)!;
-    drawBody(ctx, victim, b.pos);
+    drawBody(ctx, victim, b.pos, time);
   }
 
-  // people: you see only who shares your location
+  // people you can see
   const target = killTarget(state)?.id;
   const offer = pactCandidate(state)?.id;
-  const visible = state.characters.filter((c) => c.alive && (c.isPlayer || c.loc === you.loc));
-  for (const c of state.characters) if (c.alive) updateFacing(c);
-  for (const c of visible.sort((a, b) => a.pos.y - b.pos.y)) {
-    const highlight = c.id === target ? "#f43f5e" : c.id === offer ? "#a78bfa" : undefined;
-    drawDiver(ctx, c, facing.get(c.id)?.dir ?? { x: 0, y: 1 }, time, highlight);
-  }
+  for (const c of state.characters) if (c.alive) motion(c);
+  const visible = state.characters.filter((c) => c.alive && (c.isPlayer || c.loc === you.loc)).sort((a, b) => a.pos.y - b.pos.y);
+  for (const c of visible) drawDiver(ctx, c, time, c.id === target ? PAL.coral : c.id === offer ? PAL.orchid : undefined);
 
-  // fog over everywhere you aren't
-  ctx.fillStyle = "rgba(2,6,15,0.62)";
-  for (const room of ROOMS) if (room.id !== you.loc) {
-    roundRect(ctx, room.rect, 12);
+  // fog everywhere else
+  ctx.fillStyle = PAL.fog;
+  for (const room of ROOMS) {
+    if (room.id === you.loc) continue;
+    ctx.beginPath();
+    ctx.roundRect(room.rect.x, room.rect.y, room.rect.w, room.rect.h, 14);
     ctx.fill();
   }
   for (const c of CORRIDORS) if (c.id !== you.loc) for (const r of c.rects) ctx.fillRect(r.x, r.y, r.w, r.h);
 
-  // light around you
+  drawLabels(ctx, you.loc);
+
+  // your helmet lamp
   if (you.alive) {
-    const lamp = ctx.createRadialGradient(you.pos.x, you.pos.y, 10, you.pos.x, you.pos.y, 140);
-    lamp.addColorStop(0, "rgba(253,230,138,0.10)");
-    lamp.addColorStop(1, "rgba(253,230,138,0)");
+    ctx.save();
+    ctx.beginPath();
+    for (const r of rectsOf(you.loc)) ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    const lamp = ctx.createRadialGradient(you.pos.x, you.pos.y, 8, you.pos.x, you.pos.y, 150);
+    lamp.addColorStop(0, "rgba(255,240,200,0.10)");
+    lamp.addColorStop(1, "rgba(255,240,200,0)");
     ctx.fillStyle = lamp;
-    for (const r of rectsOf(you.loc)) ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+    ctx.restore();
   }
 
-  // task progress ring
+  // task progress
   const task = nearbyTask(state);
   if (task && task.progress > 0) {
     ctx.beginPath();
-    ctx.arc(you.pos.x, you.pos.y - 30, 9, -Math.PI / 2, -Math.PI / 2 + task.progress * Math.PI * 2);
-    ctx.strokeStyle = "#facc15";
+    ctx.arc(you.pos.x, you.pos.y - 36, 9, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
     ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(you.pos.x, you.pos.y - 36, 9, -Math.PI / 2, -Math.PI / 2 + task.progress * Math.PI * 2);
+    ctx.strokeStyle = PAL.ember;
     ctx.stroke();
   }
 }

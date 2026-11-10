@@ -137,7 +137,7 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
     <canvas
       ref={canvasRef}
       onPointerDown={onPointer}
-      className="block w-full touch-none select-none rounded-xl border border-sky-900/60 bg-[#02070f]"
+      className="block w-full touch-none select-none rounded-2xl border border-line bg-abyss shadow-[0_0_60px_-30px_#5ce1e6]"
       style={{ aspectRatio: `${WORLD.width} / ${WORLD.height}` }}
       aria-label="Station map. Move with WASD or arrow keys, or click where you want to go."
     />

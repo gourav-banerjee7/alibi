@@ -5,6 +5,7 @@ import type { Director } from "@/lib/ai/director";
 import { resolvePact, type PactDecision } from "@/lib/game/actions";
 import { byId } from "@/lib/game/rules";
 import type { GameState, PactKind } from "@/lib/game/types";
+import { DiverIcon } from "./DiverIcon";
 
 interface Props {
   state: GameState;
@@ -61,8 +62,8 @@ function KillerOffersYou({ state, director, from, onClose }: Omit<Props, "to">) 
   }
 
   return (
-    <Frame title={`${killer.name} corners you`} accent={killer.color} subtitle="Nobody else can hear this.">
-      <Chat chat={chat} thinking={thinking ? killer.name : null} colorOf={(s) => (s === "You" ? "#f5f5f4" : killer.color)} />
+    <Frame title={`${killer.name} corners you`} who={from} subtitle="Nobody else can hear this.">
+      <Chat chat={chat} thinking={thinking ? killer.name : null} idOf={(s) => (s === "You" ? "you" : from)} />
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
@@ -76,9 +77,9 @@ function KillerOffersYou({ state, director, from, onClose }: Omit<Props, "to">) 
           onChange={(e) => setDraft(e.target.value)}
           disabled={thinking || replies >= MAX_REPLIES}
           placeholder={replies < MAX_REPLIES ? "Negotiate, stall, or threaten…" : "Decide."}
-          className="flex-1 rounded-lg border border-violet-900 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none disabled:opacity-50"
+          className="flex-1 rounded-xl border border-orchid/30 bg-abyss px-3.5 py-2.5 text-ink placeholder:text-faint focus:border-orchid/70 focus:outline-none disabled:opacity-50"
         />
-        <button disabled={thinking || replies >= MAX_REPLIES} className="rounded-lg bg-violet-700 px-4 py-2 font-semibold text-white hover:bg-violet-600 disabled:opacity-40">
+        <button disabled={thinking || replies >= MAX_REPLIES} className="rounded-xl bg-orchid px-4 py-2.5 font-semibold text-[#160b2e] hover:brightness-110 disabled:opacity-40">
           Say
         </button>
       </form>
@@ -118,11 +119,11 @@ function YouOfferThem({ state, director, to, onClose }: Omit<Props, "from">) {
   }
 
   return (
-    <Frame title={`Alone with ${them.name}`} accent={them.color} subtitle="Confess and offer a deal. They might accept, refuse, or only pretend.">
-      <Chat chat={chat} thinking={thinking ? them.name : null} colorOf={(s) => (s === "You" ? "#f5f5f4" : them.color)} />
+    <Frame title={`Alone with ${them.name}`} who={to} subtitle="Confess and offer a deal. They might accept, refuse, or only pretend.">
+      <Chat chat={chat} thinking={thinking ? them.name : null} idOf={(s) => (s === "You" ? "you" : to)} />
       {result ? (
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-muted">
             {result.accept
               ? `${them.name} agreed${result.kind === "swap" ? " to take the knife" : " to cover for you"}. Whether they meant it, you'll find out at the meeting.`
               : `${them.name} refused, and now knows what you are.`}
@@ -131,7 +132,7 @@ function YouOfferThem({ state, director, to, onClose }: Omit<Props, "from">) {
             onClick={() =>
               onClose(result.accept ? `${them.name} agreed to your deal… apparently.` : `${them.name} refused your deal. They'll talk at the next meeting.`)
             }
-            className="rounded-lg bg-slate-700 px-4 py-2 font-semibold text-white hover:bg-slate-600"
+            className="rounded-xl border border-line-strong bg-deep-3 px-4 py-2.5 font-semibold text-ink hover:bg-line"
           >
             Leave
           </button>
@@ -143,7 +144,7 @@ function YouOfferThem({ state, director, to, onClose }: Omit<Props, "from">) {
             maxLength={240}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Optional: write your own pitch"
-            className="mt-3 w-full rounded-lg border border-violet-900 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none"
+            className="mt-3 w-full rounded-xl border border-orchid/30 bg-abyss px-3.5 py-2.5 text-ink placeholder:text-faint focus:border-orchid/70 focus:outline-none"
           />
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <Choice disabled={thinking} onClick={() => void offer("vouch")} title="Ask them to vouch" body="Confess, and ask for an alibi." tone="violet" />
@@ -160,49 +161,52 @@ export function PactDialog(props: Props) {
   return props.from === "you" ? <YouOfferThem {...props} /> : <KillerOffersYou {...props} />;
 }
 
-function Frame({ title, subtitle, accent, children }: { title: string; subtitle: string; accent: string; children: React.ReactNode }) {
+function Frame({ title, subtitle, who, children }: { title: string; subtitle: string; who: string; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-[#05030f]/80 p-3 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-2xl border border-violet-900/80 bg-[#0b0718] p-5 shadow-2xl">
-        <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">Private</p>
-        <h2 className="mt-1 flex items-center gap-2 text-xl font-semibold text-slate-50">
-          <span className="h-3 w-3 rounded-full" style={{ background: accent }} /> {title}
-        </h2>
-        <p className="text-sm text-slate-400">{subtitle}</p>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-abyss/85 p-3 backdrop-blur-md">
+      <div className="w-full max-w-xl rounded-3xl border border-orchid/35 bg-gradient-to-b from-orchid-dim/70 to-deep p-6 shadow-[0_0_80px_-20px_#b48cff]">
+        <div className="flex items-center gap-4">
+          <DiverIcon id={who} size={56} glow />
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-orchid">Private</p>
+            <h2 className="mt-0.5 text-xl font-semibold text-ink">{title}</h2>
+            <p className="text-sm text-muted">{subtitle}</p>
+          </div>
+        </div>
         <div className="mt-4">{children}</div>
       </div>
     </div>
   );
 }
 
-function Chat({ chat, thinking, colorOf }: { chat: Line[]; thinking: string | null; colorOf: (s: string) => string }) {
+function Chat({ chat, thinking, idOf }: { chat: Line[]; thinking: string | null; idOf: (s: string) => string }) {
   if (chat.length === 0 && !thinking) return null;
   return (
-    <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg bg-black/30 p-3" aria-live="polite">
+    <div className="max-h-72 space-y-3 overflow-y-auto rounded-2xl border border-line bg-abyss/60 p-3.5" aria-live="polite">
       {chat.map((l, i) => (
-        <div key={i} className="flex gap-2.5">
-          <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorOf(l.speaker) }} />
-          <p className="text-[15px] leading-relaxed text-slate-100">
-            <span className="mr-1.5 text-xs font-semibold text-slate-400">{l.speaker}</span>
+        <div key={i} className="animate-rise flex gap-2.5">
+          <DiverIcon id={idOf(l.speaker)} size={28} />
+          <p className="text-[15px] leading-relaxed text-ink">
+            <span className="mr-1.5 text-xs font-semibold text-muted">{l.speaker}</span>
             {l.text}
           </p>
         </div>
       ))}
-      {thinking ? <p className="text-sm text-slate-500">{thinking} is choosing their words…</p> : null}
+      {thinking ? <p className="text-sm text-faint">{thinking} is choosing their words…</p> : null}
     </div>
   );
 }
 
 function Choice({ title, body, onClick, disabled, tone }: { title: string; body: string; onClick: () => void; disabled?: boolean; tone: "violet" | "rose" | "slate" }) {
   const tones = {
-    violet: "border-violet-700 hover:bg-violet-950",
-    rose: "border-rose-700 hover:bg-rose-950",
-    slate: "border-slate-700 hover:bg-slate-900",
+    violet: "border-orchid/50 bg-orchid-dim/40 hover:border-orchid hover:shadow-[0_0_20px_-6px_#b48cff]",
+    rose: "border-coral/50 bg-coral-dim/40 hover:border-coral hover:shadow-[0_0_20px_-6px_#ff5d73]",
+    slate: "border-line-strong bg-deep hover:border-faint",
   };
   return (
-    <button onClick={onClick} disabled={disabled} className={`rounded-lg border p-3 text-left transition disabled:opacity-40 ${tones[tone]}`}>
-      <span className="block font-semibold text-slate-50">{title}</span>
-      <span className="block text-xs text-slate-400">{body}</span>
+    <button onClick={onClick} disabled={disabled} className={`rounded-2xl border p-3.5 text-left transition disabled:opacity-40 ${tones[tone]}`}>
+      <span className="block font-semibold text-ink">{title}</span>
+      <span className="block text-xs text-muted">{body}</span>
     </button>
   );
 }

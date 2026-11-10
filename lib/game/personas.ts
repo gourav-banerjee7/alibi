@@ -3,7 +3,7 @@ import type { Persona } from "./types";
 export const PLAYER: Persona = {
   id: "you",
   name: "You",
-  color: "#f5f5f4",
+  color: "#E8ECF6",
   job: "relief diver",
   voice: "",
   pactStyle: "loyal",
@@ -13,7 +13,7 @@ export const CREW: Persona[] = [
   {
     id: "mara",
     name: "Mara",
-    color: "#f472b6",
+    color: "#FF6FA5",
     job: "marine biologist",
     voice: "Dry and sarcastic, precise about times, quick to point out holes in other people's stories.",
     pactStyle: "schemer",
@@ -21,7 +21,7 @@ export const CREW: Persona[] = [
   {
     id: "juno",
     name: "Juno",
-    color: "#facc15",
+    color: "#FFD25C",
     job: "systems engineer",
     voice: "Anxious and talks too much, over-explains with technical detail, apologises a lot.",
     pactStyle: "greedy",
@@ -29,7 +29,7 @@ export const CREW: Persona[] = [
   {
     id: "tobias",
     name: "Tobias",
-    color: "#60a5fa",
+    color: "#5B8DFF",
     job: "station security chief",
     voice: "Clipped and authoritative, treats the meeting like an interrogation, quick to accuse.",
     pactStyle: "paranoid",
@@ -37,7 +37,7 @@ export const CREW: Persona[] = [
   {
     id: "ines",
     name: "Ines",
-    color: "#34d399",
+    color: "#3FE0A0",
     job: "station medic",
     voice: "Calm and warm, sticks to facts, notices how people are behaving.",
     pactStyle: "honest",
@@ -45,7 +45,7 @@ export const CREW: Persona[] = [
   {
     id: "kenji",
     name: "Kenji",
-    color: "#fb923c",
+    color: "#FF9A4D",
     job: "comms officer",
     voice: "Jokey and deflects with humour, but sharp when it matters.",
     pactStyle: "loyal",

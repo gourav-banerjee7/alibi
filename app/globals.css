@@ -1,28 +1,85 @@
 @import "tailwindcss";
 
+/*
+ * Abyssal palette: near-black blue-violet water, one bioluminescent cyan for the interface,
+ * warm ember for alarms, coral for danger, orchid for secret deals, kelp for success.
+ */
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-abyss: #05070d;
+  --color-deep: #0b0f1a;
+  --color-deep-2: #111628;
+  --color-deep-3: #182037;
+  --color-line: #1d2540;
+  --color-line-strong: #2d3a60;
+
+  --color-ink: #e9ecf5;
+  --color-muted: #9099b2;
+  --color-faint: #5b6482;
+
+  --color-glow: #5ce1e6;
+  --color-glow-ink: #04181b;
+  --color-glow-dim: #0f3a40;
+
+  --color-ember: #ffb547;
+  --color-ember-dim: #3d2a0c;
+  --color-coral: #ff5d73;
+  --color-coral-dim: #3e1219;
+  --color-orchid: #b48cff;
+  --color-orchid-dim: #261a45;
+  --color-kelp: #5be49b;
 }
 
 :root {
   color-scheme: dark;
-  --background: #030914;
-  --foreground: #e2e8f0;
 }
 
 body {
   background:
-    radial-gradient(1200px 600px at 20% -10%, rgba(14, 116, 144, 0.18), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(30, 64, 175, 0.15), transparent 60%),
-    var(--background);
-  color: var(--foreground);
+    radial-gradient(1100px 520px at 15% -12%, rgba(92, 225, 230, 0.09), transparent 62%),
+    radial-gradient(900px 520px at 105% -5%, rgba(180, 140, 255, 0.08), transparent 60%),
+    radial-gradient(1200px 600px at 50% 120%, rgba(30, 60, 140, 0.18), transparent 60%),
+    #05070d;
+  background-attachment: fixed;
+  color: #e9ecf5;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #2dd4bf;
+  outline: 2px solid #5ce1e6;
   outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(92, 225, 230, 0.3);
+}
+
+/* Scrollbars that belong in the deep. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2d3a60 transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise {
+    animation: none;
+  }
 }

@@ -183,7 +183,7 @@ export function Alibi() {
             <StationView state={game} paused={overlay !== null} useHeld={useHeld} onFrame={onFrame} />
             {toast ? (
               <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-                <p className="rounded-full border border-sky-800 bg-slate-950/90 px-4 py-1.5 text-center text-sm text-sky-100 shadow-lg">{toast}</p>
+                <p className="animate-rise rounded-full border border-glow/30 bg-abyss/90 px-4 py-1.5 text-center text-sm text-ink shadow-[0_0_24px_-8px_#5ce1e6] backdrop-blur">{toast}</p>
               </div>
             ) : null}
           </div>

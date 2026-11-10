@@ -13,20 +13,20 @@ export interface Room {
   id: RoomId;
   name: string;
   rect: Rect;
-  /** Floor tint on the map. */
+  /** Bioluminescent accent for the room's walls, label and light. */
   tint: string;
   /** Spots where someone can stand at a console. */
   consoles: Point[];
 }
 
 export const ROOMS: Room[] = [
-  { id: "dock", name: "Sub Dock", rect: { x: 40, y: 240, w: 180, h: 160 }, tint: "#12324a", consoles: [{ x: 80, y: 280 }, { x: 180, y: 370 }] },
-  { id: "comms", name: "Comms", rect: { x: 260, y: 40, w: 200, h: 150 }, tint: "#1d2d52", consoles: [{ x: 300, y: 80 }, { x: 400, y: 80 }] },
-  { id: "lab", name: "Bio Lab", rect: { x: 540, y: 40, w: 200, h: 150 }, tint: "#16404a", consoles: [{ x: 600, y: 80 }, { x: 700, y: 160 }] },
-  { id: "mess", name: "Mess Hall", rect: { x: 400, y: 250, w: 200, h: 140 }, tint: "#2a2f4a", consoles: [{ x: 500, y: 320 }] },
-  { id: "reactor", name: "Reactor", rect: { x: 780, y: 240, w: 180, h: 160 }, tint: "#3d2440", consoles: [{ x: 920, y: 280 }, { x: 830, y: 370 }] },
-  { id: "medbay", name: "Medbay", rect: { x: 260, y: 450, w: 200, h: 150 }, tint: "#173f3a", consoles: [{ x: 300, y: 570 }, { x: 410, y: 480 }] },
-  { id: "hydro", name: "Hydroponics", rect: { x: 540, y: 450, w: 200, h: 150 }, tint: "#1d3d26", consoles: [{ x: 700, y: 570 }, { x: 590, y: 560 }] },
+  { id: "dock", name: "Sub Dock", rect: { x: 40, y: 240, w: 180, h: 160 }, tint: "#38D6F5", consoles: [{ x: 80, y: 280 }, { x: 180, y: 370 }] },
+  { id: "comms", name: "Comms", rect: { x: 260, y: 40, w: 200, h: 150 }, tint: "#8B93FF", consoles: [{ x: 300, y: 80 }, { x: 400, y: 80 }] },
+  { id: "lab", name: "Bio Lab", rect: { x: 540, y: 40, w: 200, h: 150 }, tint: "#3EE0C8", consoles: [{ x: 600, y: 80 }, { x: 700, y: 160 }] },
+  { id: "mess", name: "Mess Hall", rect: { x: 400, y: 250, w: 200, h: 140 }, tint: "#FFB547", consoles: [{ x: 500, y: 320 }] },
+  { id: "reactor", name: "Reactor", rect: { x: 780, y: 240, w: 180, h: 160 }, tint: "#FF6B7D", consoles: [{ x: 920, y: 280 }, { x: 830, y: 370 }] },
+  { id: "medbay", name: "Medbay", rect: { x: 260, y: 450, w: 200, h: 150 }, tint: "#5BE49B", consoles: [{ x: 300, y: 570 }, { x: 410, y: 480 }] },
+  { id: "hydro", name: "Hydroponics", rect: { x: 540, y: 450, w: 200, h: 150 }, tint: "#B5E853", consoles: [{ x: 700, y: 570 }, { x: 590, y: 560 }] },
 ];
 
 export interface Corridor {

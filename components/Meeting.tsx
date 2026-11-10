@@ -6,6 +6,7 @@ import { tallyVotes } from "@/lib/game/actions";
 import { clock } from "@/lib/game/clock";
 import { locationName } from "@/lib/game/map";
 import { aliveChars, byId } from "@/lib/game/rules";
+import { DiverIcon } from "./DiverIcon";
 import type { Body, GameState, MeetingRecord, TranscriptLine } from "@/lib/game/types";
 
 type Stage = "statements" | "your-statement" | "discussion" | "voting" | "counting" | "result";
@@ -31,7 +32,7 @@ function speakingOrder(state: GameState, calledBy: string): string[] {
 }
 
 function Dot({ color }: { color: string }) {
-  return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />;
+  return <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />;
 }
 
 export function Meeting({ state, director, pending, onDone }: Props) {
@@ -121,47 +122,52 @@ export function Meeting({ state, director, pending, onDone }: Props) {
   const ejected = tally?.ejected ? byId(state, tally.ejected) : null;
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-[#020611]/85 p-3 backdrop-blur-sm sm:p-6">
-      <div className="flex h-full max-h-[52rem] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-sky-900 bg-[#06101f] shadow-2xl">
-        <header className="border-b border-sky-900/70 p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Emergency meeting · {clock(state.t)}</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-50">{header}</h2>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-abyss/85 p-3 backdrop-blur-md sm:p-6">
+      <div className="flex h-full max-h-[52rem] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-line-strong bg-deep shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]">
+        <header className="border-b border-line bg-gradient-to-b from-ember-dim/40 to-transparent p-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ember">Emergency meeting · {clock(state.t)}</p>
+          <h2 className="mt-1.5 text-xl font-semibold text-ink">{header}</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {state.characters.map((c) => (
               <span
                 key={c.id}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs ${c.alive ? "border-slate-700 text-slate-200" : "border-slate-800 text-slate-600 line-through"}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs transition ${speaking === c.id ? "border-glow/60 bg-glow-dim/40 text-ink" : c.alive ? "border-line text-ink" : "border-line/60 text-faint line-through"}`}
               >
-                <Dot color={c.alive ? c.color : "#334155"} />
+                <DiverIcon id={c.id} size={22} dead={!c.alive} />
                 {c.isPlayer ? "You" : c.name}
-                {speaking === c.id ? <span className="text-teal-400">speaking…</span> : null}
+                {speaking === c.id ? <span className="text-glow">speaking…</span> : null}
               </span>
             ))}
           </div>
         </header>
 
-        <div ref={scroller} className="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
+        <div ref={scroller} className="flex-1 space-y-4 overflow-y-auto p-5" aria-live="polite">
           {record.transcript.map((l, i) => (
-            <div key={i} className={`flex gap-2.5 ${l.kind === "vote" ? "opacity-80" : ""}`}>
-              <Dot color={colorOf(l.speaker)} />
-              <div className="-mt-1 min-w-0">
-                <p className="text-xs text-slate-400">
-                  <span className="font-semibold text-slate-200">{nameOf(l.speaker)}</span>
+            <div key={i} className={`animate-rise flex gap-3 ${l.kind === "vote" ? "opacity-75" : ""}`}>
+              <DiverIcon id={l.speaker} size={l.kind === "vote" ? 26 : 34} className="mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-xs text-muted">
+                  <span className="font-semibold" style={{ color: colorOf(l.speaker) }}>{nameOf(l.speaker)}</span>
                   {l.to ? <> → {nameOf(l.to)}</> : null}
-                  {l.kind === "vote" ? " · vote" : null}
+                  {l.kind === "vote" ? <span className="text-faint"> · vote</span> : null}
                 </p>
-                <p className="text-[15px] leading-relaxed text-slate-100">{l.text}</p>
+                <p className={`leading-relaxed text-ink ${l.kind === "vote" ? "text-sm" : "text-[15px]"}`}>{l.text}</p>
               </div>
             </div>
           ))}
           {speaking ? (
-            <p className="flex items-center gap-2 text-sm text-slate-400">
-              <Dot color={colorOf(speaking)} /> {nameOf(speaking)} is thinking…
+            <p className="flex items-center gap-2 text-sm text-muted">
+              <Dot color={colorOf(speaking)} /> {nameOf(speaking)} is thinking
+              <span className="inline-flex gap-0.5" aria-hidden>
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted [animation-delay:-0.3s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted [animation-delay:-0.15s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-muted" />
+              </span>
             </p>
           ) : null}
         </div>
 
-        <footer className="border-t border-sky-900/70 p-4">
+        <footer className="border-t border-line bg-deep-2/60 p-4">
           {stage === "your-statement" ? (
             <form
               className="flex flex-col gap-2 sm:flex-row"
@@ -177,11 +183,11 @@ export function Meeting({ state, director, pending, onDone }: Props) {
                 maxLength={240}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Your turn. Where were you? Who did you see?"
-                className="flex-1 rounded-lg border border-sky-800 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none"
+                className="flex-1 rounded-xl border border-line-strong bg-abyss px-3.5 py-2.5 text-ink placeholder:text-faint focus:border-glow/70 focus:outline-none"
               />
               <div className="flex gap-2">
-                <button className="rounded-lg bg-teal-600 px-4 py-2 font-semibold text-white hover:bg-teal-500">Say it</button>
-                <button type="button" onClick={() => yourTurn.current?.("")} className="rounded-lg border border-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-800">
+                <button className="rounded-xl bg-glow px-4 py-2.5 font-semibold text-glow-ink hover:brightness-110">Say it</button>
+                <button type="button" onClick={() => yourTurn.current?.("")} className="rounded-xl border border-line-strong px-3.5 py-2.5 text-muted hover:bg-deep-3 hover:text-ink">
                   Stay quiet
                 </button>
               </div>
@@ -200,7 +206,7 @@ export function Meeting({ state, director, pending, onDone }: Props) {
                 <select
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="rounded-lg border border-sky-800 bg-slate-950 px-2 py-2 text-slate-100"
+                  className="rounded-xl border border-line-strong bg-abyss px-2.5 py-2.5 text-ink"
                   aria-label="Who to question"
                 >
                   {others.map((c) => (
@@ -215,9 +221,9 @@ export function Meeting({ state, director, pending, onDone }: Props) {
                   onChange={(e) => setDraft(e.target.value)}
                   disabled={questionsLeft <= 0 || Boolean(speaking)}
                   placeholder={questionsLeft > 0 ? `Question or accusation (${questionsLeft} left)` : "No questions left. Time to vote."}
-                  className="flex-1 rounded-lg border border-sky-800 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:outline-none disabled:opacity-50"
+                  className="flex-1 rounded-xl border border-line-strong bg-abyss px-3.5 py-2.5 text-ink placeholder:text-faint focus:border-glow/70 focus:outline-none disabled:opacity-50"
                 />
-                <button disabled={questionsLeft <= 0 || Boolean(speaking)} className="rounded-lg bg-sky-700 px-4 py-2 font-semibold text-white hover:bg-sky-600 disabled:opacity-40">
+                <button disabled={questionsLeft <= 0 || Boolean(speaking)} className="rounded-xl bg-glow px-4 py-2.5 font-semibold text-glow-ink hover:brightness-110 disabled:opacity-40">
                   Ask
                 </button>
               </form>
@@ -225,13 +231,13 @@ export function Meeting({ state, director, pending, onDone }: Props) {
                 <div className="flex flex-wrap gap-2 text-xs">
                   {questionsLeft > 0 && !speaking
                     ? others.slice(0, 5).map((c) => (
-                        <button key={c.id} type="button" onClick={() => { setTarget(c.id); void ask(`${c.name}, where were you when it happened?`); }} className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-300 hover:bg-slate-800">
+                        <button key={c.id} type="button" onClick={() => { setTarget(c.id); void ask(`${c.name}, where were you when it happened?`); }} className="rounded-full border border-line-strong px-3 py-1 text-muted hover:border-glow/50 hover:text-ink">
                           Grill {c.name}
                         </button>
                       ))
                     : null}
                 </div>
-                <button type="button" onClick={() => setStage("voting")} disabled={Boolean(speaking)} className="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-500 disabled:opacity-40">
+                <button type="button" onClick={() => setStage("voting")} disabled={Boolean(speaking)} className="rounded-xl bg-ember px-4 py-2.5 font-semibold text-[#2a1a00] hover:brightness-110 disabled:opacity-40">
                   Go to vote
                 </button>
               </div>
@@ -240,39 +246,39 @@ export function Meeting({ state, director, pending, onDone }: Props) {
 
           {stage === "voting" ? (
             <div>
-              <p className="mb-2 text-sm text-slate-300">Who goes in the dive chamber?</p>
+              <p className="mb-3 text-sm text-muted">Who goes in the dive chamber?</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {others.map((c) => (
-                  <button key={c.id} onClick={() => void castVote(c.id)} className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-left text-slate-100 hover:border-rose-500 hover:bg-rose-950/40">
-                    <Dot color={c.color} /> {c.name}
+                  <button key={c.id} onClick={() => void castVote(c.id)} className="flex items-center gap-2.5 rounded-xl border border-line-strong bg-deep px-3 py-2 text-left font-medium text-ink transition hover:border-coral/70 hover:bg-coral-dim/50">
+                    <DiverIcon id={c.id} size={30} /> {c.name}
                   </button>
                 ))}
-                <button onClick={() => void castVote("skip")} className="rounded-lg border border-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-800">
+                <button onClick={() => void castVote("skip")} className="rounded-xl border border-line-strong px-3.5 py-2.5 text-muted hover:bg-deep-3 hover:text-ink">
                   Skip vote
                 </button>
               </div>
             </div>
           ) : null}
 
-          {stage === "counting" ? <p className="text-sm text-slate-400">You voted {yourVote === "skip" ? "to skip" : nameOf(yourVote!)}. Counting votes…</p> : null}
+          {stage === "counting" ? <p className="text-sm text-muted">You voted {yourVote === "skip" ? "to skip" : nameOf(yourVote!)}. Counting votes…</p> : null}
 
           {stage === "result" && tally ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-lg font-semibold text-slate-50">
+                <p className="text-lg font-semibold text-ink">
                   {ejected
                     ? `${ejected.isPlayer ? "You were" : `${ejected.name} was`} locked in the dive chamber. ${ejected.role === "killer" ? `${ejected.isPlayer ? "You were" : "They were"} the killer.` : `${ejected.isPlayer ? "You were" : "They were"} not the killer.`}`
                     : "No one was ejected."}
                 </p>
-                <p className="text-sm text-slate-400">{tally.counts.map(([id, n]) => `${id === "skip" ? "Skip" : nameOf(id)} ${n}`).join(" · ")}</p>
+                <p className="text-sm text-muted">{tally.counts.map(([id, n]) => `${id === "skip" ? "Skip" : nameOf(id)} ${n}`).join(" · ")}</p>
               </div>
-              <button onClick={() => onDone(record)} className="rounded-lg bg-teal-600 px-5 py-2 font-semibold text-white hover:bg-teal-500">
+              <button onClick={() => onDone(record)} className="rounded-xl bg-glow px-5 py-2.5 font-semibold text-glow-ink hover:brightness-110">
                 Continue
               </button>
             </div>
           ) : null}
 
-          {stage === "statements" ? <p className="text-sm text-slate-500">Everyone is giving their account…</p> : null}
+          {stage === "statements" ? <p className="text-sm text-faint">Everyone is giving their account…</p> : null}
         </footer>
       </div>
     </div>
