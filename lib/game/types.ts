@@ -149,9 +149,14 @@ export interface CamSession {
   to: number | null;
 }
 
+/** The four task mini-games; `theme` picks the look and wording inside each. */
+export type MiniGameKind = "dial" | "wires" | "match" | "timing";
+
 export interface PlayerTask {
   id: string;
   label: string;
+  game: MiniGameKind;
+  theme: string;
   room: RoomId;
   pos: Point;
   progress: number;

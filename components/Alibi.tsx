@@ -5,10 +5,11 @@ import { Director, type DirectorStatus } from "@/lib/ai/director";
 import { finishMeeting } from "@/lib/game/actions";
 import { player } from "@/lib/game/rules";
 import { newGame, type StartRole } from "@/lib/game/setup";
-import { callMeeting, canCallEmergency, canSabotage, canUseCameras, isWatching, startSabotage, kill, killTarget, pactCandidate, startPlayerPact, startWatching, stopWatching, tick, visibleBody } from "@/lib/game/sim";
+import { callMeeting, canCallEmergency, canSabotage, completeTask, nearbyFix, nearbyTask, canUseCameras, isWatching, startSabotage, kill, killTarget, pactCandidate, startPlayerPact, startWatching, stopWatching, tick, visibleBody } from "@/lib/game/sim";
 import type { Body, GameState, MeetingRecord } from "@/lib/game/types";
 import { EndScreen } from "./EndScreen";
 import { CameraView } from "./CameraView";
+import { MiniGame } from "./minigames/MiniGame";
 import { ActionBar, SabotageBanner, SidePanel, TopBar } from "./Hud";
 import { Meeting } from "./Meeting";
 import { PactDialog } from "./PactDialog";
@@ -25,6 +26,7 @@ export function Alibi() {
   const [game, setGame] = useState<GameState | null>(null);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<string | null>(null);
   const [status, setStatus] = useState<DirectorStatus | null>(null);
   const [, setFrame] = useState(0);
   const lastRole = useRef<StartRole>("crew");
@@ -77,6 +79,8 @@ export function Alibi() {
       lastClues.current = game.clues.length;
       showToast(game.clues[game.clues.length - 1]!);
     }
+    // A meeting, a deal, or the game ending pulls you off any task.
+    if (game.phase !== "roam" || game.pending) setActiveTask(null);
     if (game.phase === "over") {
       setScreen("end");
       return;
@@ -152,6 +156,19 @@ export function Alibi() {
     [game, overlay],
   );
 
+  const openTask = useCallback(() => {
+    if (!game || overlay || activeTask || nearbyFix(game)) return;
+    const t = nearbyTask(game);
+    if (t) setActiveTask(t.id);
+  }, [game, overlay, activeTask]);
+
+  const finishTask = useCallback(() => {
+    if (!game || !activeTask) return;
+    completeTask(game, activeTask);
+    setActiveTask(null);
+    setFrame((n) => n + 1);
+  }, [game, activeTask]);
+
   const toggleCameras = useCallback(() => {
     if (!game || overlay) return;
     if (isWatching(game, "you")) stopWatching(game);
@@ -174,7 +191,9 @@ export function Alibi() {
   useEffect(() => {
     if (screen !== "play") return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest("input, textarea, select")) return;
+      if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select")) return;
+      if (activeTask) return; // the mini-game has the keyboard
+      if (e.code === "KeyE") openTask();
       if (e.code === "KeyR") report();
       if (e.code === "KeyM") emergency();
       if (e.code === "KeyK") doKill();
@@ -185,7 +204,7 @@ export function Alibi() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [screen, report, emergency, doKill, offer, toggleCameras, sabotage]);
+  }, [screen, report, emergency, doKill, offer, toggleCameras, sabotage, openTask, activeTask]);
 
   const meetingDone = (record: MeetingRecord) => {
     if (!game) return;
@@ -213,16 +232,24 @@ export function Alibi() {
       <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
         <div className="flex flex-col gap-3">
           <div className="relative">
-            <StationView state={game} paused={overlay !== null} useHeld={useHeld} onFrame={onFrame} />
+            <StationView state={game} paused={overlay !== null} inputLocked={activeTask !== null} useHeld={useHeld} onFrame={onFrame} />
             {isWatching(game, "you") && !overlay ? <CameraView state={game} onLeave={leaveCameras} /> : null}
             {!overlay ? <SabotageBanner state={game} /> : null}
+            {activeTask && !overlay ? (
+              <MiniGame
+                key={activeTask}
+                task={game.tasks.find((t) => t.id === activeTask)!}
+                onDone={finishTask}
+                onClose={() => setActiveTask(null)}
+              />
+            ) : null}
             {toast ? (
               <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
                 <p className="animate-rise rounded-full border border-glow/30 bg-abyss/90 px-4 py-1.5 text-center text-sm text-ink shadow-[0_0_24px_-8px_#5ce1e6] backdrop-blur">{toast}</p>
               </div>
             ) : null}
           </div>
-          <ActionBar state={game} useHeld={useHeld} onReport={report} onEmergency={emergency} onKill={doKill} onOffer={offer} onCameras={toggleCameras} onSabotage={sabotage} />
+          <ActionBar state={game} useHeld={useHeld} onReport={report} onEmergency={emergency} onKill={doKill} onOffer={offer} onCameras={toggleCameras} onSabotage={sabotage} onUse={openTask} />
         </div>
         <SidePanel state={game} />
       </div>

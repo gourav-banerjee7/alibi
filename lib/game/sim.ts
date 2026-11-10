@@ -11,7 +11,6 @@ const AI_SPEED = 116;
 const KILL_RANGE = 62;
 const USE_RANGE = 44;
 const TALK_RANGE = 240;
-const TASK_SECONDS = 2.5;
 export const BREACH_SECONDS = 45;
 const FIX_SECONDS = 2;
 const SABOTAGE_COOLDOWN = 35;
@@ -402,6 +401,15 @@ export function pactCandidate(state: GameState): Character | undefined {
   return dist(other.pos, you.pos) < TALK_RANGE ? other : undefined;
 }
 
+/** A mini-game was won. Crew get a true sonar log; the killer was only faking it. */
+export function completeTask(state: GameState, taskId: string) {
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task || task.done) return;
+  task.progress = 1;
+  task.done = true;
+  if (player(state).role !== "killer") grantClue(state);
+}
+
 export function nearbyTask(state: GameState) {
   const you = player(state);
   return state.tasks.find((t) => !t.done && dist(t.pos, you.pos) <= USE_RANGE);
@@ -438,7 +446,10 @@ export function startPlayerPact(state: GameState, to: string) {
 /** One true sighting from this round, handed out for finishing a task. */
 function grantClue(state: GameState) {
   const killer = currentKiller(state);
-  const recent = state.segments.filter((s) => s.from >= state.roundStart && s.who !== "you" && isRoom(s.loc) && (s.to ?? state.t) - s.from >= 2);
+  // Skip the round's opening seats in the mess: everyone already knows that.
+  const recent = state.segments.filter(
+    (s) => s.from >= state.roundStart && s.who !== "you" && isRoom(s.loc) && (s.to ?? state.t) - s.from >= 2 && !(s.loc === "mess" && s.from <= state.roundStart + 0.01),
+  );
   const juicy = killer ? recent.filter((s) => s.who === killer.id) : [];
   const pool = juicy.length > 0 && next(state) < 0.4 ? juicy : recent;
   if (pool.length === 0) return;
@@ -464,18 +475,7 @@ export function tick(state: GameState, input: Input, dt = STEP) {
     }
     sabotageStep(state, input.use, dt);
     if (state.phase !== "roam") return;
-    const task = nearbyFix(state) ? undefined : nearbyTask(state);
-    if (task && input.use && you.role !== "killer") {
-      task.progress = Math.min(1, task.progress + dt / TASK_SECONDS);
-      if (task.progress >= 1) {
-        task.done = true;
-        grantClue(state);
-      }
-    } else if (task && input.use && you.role === "killer") {
-      // The killer can fake tasks, but gets no clue for it.
-      task.progress = Math.min(1, task.progress + dt / TASK_SECONDS);
-      if (task.progress >= 1) task.done = true;
-    }
+    // Tasks are finished through their mini-game (see completeTask); holding Use only fixes sabotage.
   }
 
   for (const c of state.characters) {

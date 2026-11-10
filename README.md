@@ -19,7 +19,7 @@ and some only pretend so they can expose you at the next meeting.
 | | |
 |---|---|
 | Move | WASD / arrow keys, or click or tap where to go |
-| Task | stand on a yellow ring, hold **E** / Space / the Use button |
+| Task | stand on a dashed ring and press **E** (or Use) to open its mini-game |
 | Report a body | **R** |
 | Emergency meeting | **M** in the Mess Hall, once per game |
 | Security cameras | **C** at the Comms desk; Esc or any movement to leave |
@@ -42,6 +42,11 @@ and some only pretend so they can expose you at the next meeting.
     sea comes in and the killer wins.
   - The AI crew run to fix both, the AI killer uses them for cover, and everyone at the next meeting knows when
     the lights went out. Only the killer knows who did it.
+- **Task mini-games:** every task is a short puzzle, themed to the room. *Pressure dial* (hold a creeping needle
+  in the green: ballast, coolant, core, microscope focus), *cable splice* (match cables to sockets: purifier,
+  oxygen, pump), *specimen match* (pick the exact match three times: vent culture, cargo seals) and *timing
+  sweep* (strike as the sweep crosses the target: sonar, ping, vitals, kelp). The station keeps moving while you
+  work, so you're exposed. Fixing sabotage stays a quick hold-E.
 - You only see people in the same room or tube as you.
 - Each finished task pulls one **true** sonar log ("Kenji was in Reactor 02:31–02:40").
 - The storm clears after three meetings. If the killer is still aboard, the killer's side wins.
@@ -88,7 +93,7 @@ npm run dev
 ```
 
 ```bash
-npm test          # 47 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
+npm test          # 51 tests: simulation, memory, judge, pacts, win rules, director fallbacks, rate limits
 npm run typecheck
 npm run lint
 npm run build

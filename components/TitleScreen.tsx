@@ -87,7 +87,7 @@ export function TitleScreen({ status, onStart }: { status: DirectorStatus | null
             {[
               "Move with WASD or the arrow keys, or click or tap where to go.",
               "You only see who shares your room or tube.",
-              "Stand on a dashed ring and hold E to do a task. Each task gives you one true sonar log.",
+              "Stand on a dashed ring and press E to start a task: turn a dial, splice cables, match specimens or time a sweep. Each task gives you one true sonar log.",
               "Find a body and report it. Everyone gives an alibi. Question them, then vote.",
               "The storm clears after three meetings. If the killer is still aboard, they win.",
             ].map((t) => (

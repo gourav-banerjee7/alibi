@@ -21,22 +21,26 @@ const KEYS: Record<string, [number, number]> = {
 interface Props {
   state: GameState;
   paused: boolean;
+  /** The world keeps running but your diver ignores movement (e.g. while doing a task). */
+  inputLocked?: boolean;
   useHeld: React.MutableRefObject<boolean>;
   /** Called a few times a second so the HUD can re-render, and whenever the phase changes. */
   onFrame: () => void;
 }
 
-export function StationView({ state, paused, useHeld, onFrame }: Props) {
+export function StationView({ state, paused, inputLocked = false, useHeld, onFrame }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const keys = useRef(new Set<string>());
   const stateRef = useRef(state);
   stateRef.current = state;
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const lockedRef = useRef(inputLocked);
+  lockedRef.current = inputLocked;
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest("input, textarea")) return;
+      if ((e.target as HTMLElement | null)?.closest?.("input, textarea")) return;
       if (KEYS[e.code]) {
         keys.current.add(e.code);
         e.preventDefault();
@@ -99,7 +103,8 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
           }
         }
         const len = Math.hypot(dx, dy);
-        const input: Input = { dir: len > 0 ? { x: dx / len, y: dy / len } : null, use: useHeld.current };
+        const locked = lockedRef.current;
+        const input: Input = { dir: len > 0 && !locked ? { x: dx / len, y: dy / len } : null, use: !locked && useHeld.current };
         acc += dt;
         while (acc >= STEP && s.phase === "roam") {
           tick(s, input);
@@ -126,7 +131,7 @@ export function StationView({ state, paused, useHeld, onFrame }: Props) {
 
   const onPointer = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const s = stateRef.current;
-    if (pausedRef.current || s.phase !== "roam") return;
+    if (pausedRef.current || lockedRef.current || s.phase !== "roam") return;
     const rect = e.currentTarget.getBoundingClientRect();
     const cam = cameraFor(s);
     const p = { x: cam.x + ((e.clientX - rect.left) / rect.width) * VIEW.w, y: cam.y + ((e.clientY - rect.top) / rect.height) * VIEW.h };

@@ -150,6 +150,7 @@ interface ActionProps {
   onOffer: () => void;
   onCameras: () => void;
   onSabotage: (kind: "blackout" | "breach") => void;
+  onUse: () => void;
 }
 
 type Tone = "glow" | "ember" | "coral" | "orchid" | "plain";
@@ -184,7 +185,7 @@ function Btn(props: { label: string; hint: string; onClick?: () => void; disable
   );
 }
 
-export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer, onCameras, onSabotage }: ActionProps) {
+export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOffer, onCameras, onSabotage, onUse }: ActionProps) {
   const you = player(state);
   const fix = nearbyFix(state);
   const task = fix ?? nearbyTask(state);
@@ -194,7 +195,11 @@ export function ActionBar({ state, useHeld, onReport, onEmergency, onKill, onOff
   const offer = pactCandidate(state);
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Btn label={fix ? "Fix" : "Use"} hint="hold E / Space" tone={fix ? "coral" : "glow"} holdRef={useHeld} disabled={!task} sub={task ? task.label : "stand on a dashed ring"} />
+      {fix ? (
+        <Btn label="Fix" hint="hold E / Space" tone="coral" holdRef={useHeld} sub={fix.label} />
+      ) : (
+        <Btn label="Use" hint="E" tone="glow" onClick={onUse} disabled={!task} sub={task ? task.label : "stand on a dashed ring"} />
+      )}
       <Btn label="Report body" hint="R" tone="ember" onClick={onReport} disabled={!body} />
       <Btn
         label={isWatching(state, "you") ? "Leave cameras" : "Cameras"}
